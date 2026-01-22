@@ -491,21 +491,49 @@
     }
 
     function setupSubstitutionHover() {
-      // Hover on substitution boxes highlights all boxes from the same source in the same step
+      // Hover on substitution boxes highlights:
+      // 1. All red boxes from the same source in the same step
+      // 2. The corresponding yellow source box in the previous step
       const boxes = document.querySelectorAll('.substitution-box');
       boxes.forEach(el => {
         const sourceId = parseInt(el.dataset.sourceId);
         const stepIndex = parseInt(el.dataset.stepIndex);
 
         el.addEventListener('mouseenter', () => {
+          // Highlight all red boxes with same source in current step
           document.querySelectorAll(`.substitution-box[data-source-id="${sourceId}"][data-step-index="${stepIndex}"]`).forEach(s => {
             s.classList.add('highlight');
           });
+
+          // Highlight the corresponding yellow source box in previous step
+          if (stepIndex > 0) {
+            const prevMessage = document.querySelector(`.message[data-step-index="${stepIndex - 1}"]`);
+            if (prevMessage) {
+              // Find the .arg.source-highlight that corresponds to this sourceId
+              // The sourceId is the redex ID, so find the redex indicator and its .arg sibling
+              const indicators = prevMessage.querySelectorAll('.redex-indicator');
+              indicators.forEach(ind => {
+                if (parseInt(ind.textContent) === sourceId) {
+                  // Walk back to find the .arg wrapper
+                  let node = ind.previousSibling;
+                  while (node && (node.nodeType === 3 || (node.classList && node.classList.contains('paren')))) {
+                    node = node.previousSibling;
+                  }
+                  if (node && node.classList && node.classList.contains('arg')) {
+                    node.classList.add('source-hover');
+                  }
+                }
+              });
+            }
+          }
         });
 
         el.addEventListener('mouseleave', () => {
           document.querySelectorAll('.substitution-box.highlight').forEach(s => {
             s.classList.remove('highlight');
+          });
+          document.querySelectorAll('.source-hover').forEach(s => {
+            s.classList.remove('source-hover');
           });
         });
       });

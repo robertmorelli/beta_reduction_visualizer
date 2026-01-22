@@ -377,11 +377,17 @@ body {
   display: inline;
 }
 
-/* Source highlight in previous step */
+/* Source highlight in previous step (yellow box) */
 .source-highlight {
   background: var(--source-bg) !important;
   box-shadow: 2px 2px 0 rgba(154, 154, 0, 0.5) !important;
   padding: 2px 4px;
+}
+
+/* Source highlight hover state (when hovering corresponding red box) */
+.source-hover {
+  background: #4a4a15 !important;
+  box-shadow: 3px 3px 0 rgba(200, 200, 0, 0.7) !important;
 }
 
 /* Scrollbar styling */
