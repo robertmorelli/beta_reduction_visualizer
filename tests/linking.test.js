@@ -10,9 +10,13 @@ import {
   getSubstitutions,
   getRedexArg,
   getLinkingInfo,
+  getFullLinkingInfo,
   buildLinkingChain,
   toPlainString,
   getRedexCount,
+  findVariableUses,
+  getParameterUses,
+  getRedex,
 } from '../src/kernel.js';
 
 // Helper to perform a reduction step
@@ -70,7 +74,7 @@ console.log('Test 2: K combinator (λx.λy.x) first second');
 
   // Reduce [1]: (λx.λy.x) first -> λy.first
   const expr1 = reduceStep(expr0, 1);
-  assert.strictEqual(toPlainString(expr1), '(λy.first second)', 'After step 1');
+  assert.strictEqual(toPlainString(expr1), '((λy.first) second)', 'After step 1');
 
   const subs1 = getSubstitutions(expr1);
   assert.strictEqual(subs1.get(1)?.length, 1, 'Should have 1 substituted node from redex 1');
@@ -241,6 +245,102 @@ console.log('Test 7: wasUsed detection');
   assert.strictEqual(linkInfo4.wasUsed, false, 'x is shadowed by inner lambda');
 
   console.log('  ✓ wasUsed detection test passed\n');
+}
+
+// ============================================================================
+// Test 8: findVariableUses - basic usage
+// ============================================================================
+console.log('Test 8: findVariableUses');
+{
+  // Single use
+  const expr1 = setup('\\x.x');
+  const uses1 = findVariableUses(expr1.body, 'x');
+  assert.strictEqual(uses1.length, 1, 'Should find 1 use of x');
+  assert.strictEqual(uses1[0].name, 'x', 'Found variable should be x');
+
+  // Multiple uses
+  const expr2 = setup('\\x.x x x');
+  const uses2 = findVariableUses(expr2.body, 'x');
+  assert.strictEqual(uses2.length, 3, 'Should find 3 uses of x');
+
+  // No uses
+  const expr3 = setup('\\x.y');
+  const uses3 = findVariableUses(expr3.body, 'x');
+  assert.strictEqual(uses3.length, 0, 'Should find 0 uses of x');
+
+  // Shadowed variable
+  const expr4 = setup('\\x.\\x.x');
+  const uses4 = findVariableUses(expr4.body, 'x');
+  assert.strictEqual(uses4.length, 0, 'Should find 0 uses of outer x (shadowed)');
+
+  console.log('  ✓ findVariableUses test passed\n');
+}
+
+// ============================================================================
+// Test 9: getParameterUses - for redexes
+// ============================================================================
+console.log('Test 9: getParameterUses');
+{
+  // Identity function: (λx.x) arg - x used once
+  const expr1 = setup('(\\x.x) arg');
+  const redex1 = getRedex(expr1, 1);
+  const uses1 = getParameterUses(redex1);
+  assert.strictEqual(uses1.length, 1, 'Should find 1 parameter use in identity');
+
+  // Self-application: (λx.x x) arg - x used twice
+  const expr2 = setup('(\\x.x x) arg');
+  const redex2 = getRedex(expr2, 1);
+  const uses2 = getParameterUses(redex2);
+  assert.strictEqual(uses2.length, 2, 'Should find 2 parameter uses in self-app');
+
+  // K combinator inner: (λy.first) second - y not used
+  const expr3 = setup('(\\y.first) second');
+  const redex3 = getRedex(expr3, 1);
+  const uses3 = getParameterUses(redex3);
+  assert.strictEqual(uses3.length, 0, 'Should find 0 parameter uses in K');
+
+  // Not a redex
+  const expr4 = setup('f x');
+  const uses4 = getParameterUses(expr4);
+  assert.strictEqual(uses4.length, 0, 'Should return empty for non-redex');
+
+  console.log('  ✓ getParameterUses test passed\n');
+}
+
+// ============================================================================
+// Test 10: getFullLinkingInfo - with parameterUses
+// ============================================================================
+console.log('Test 10: getFullLinkingInfo');
+{
+  // Identity function
+  const expr0 = setup('(\\x.x) hello');
+  const expr1 = reduceStep(expr0, 1);
+
+  const fullInfo = getFullLinkingInfo(expr0, expr1, 1);
+  assert.strictEqual(toPlainString(fullInfo.sourceArg), 'hello', 'Source arg is hello');
+  assert.strictEqual(fullInfo.parameterUses.length, 1, 'Should have 1 parameter use');
+  assert.strictEqual(fullInfo.parameterUses[0].name, 'x', 'Parameter use is x');
+  assert.strictEqual(fullInfo.substitutedNodes.length, 1, 'Should have 1 substituted node');
+  assert.strictEqual(fullInfo.wasUsed, true, 'Variable was used');
+
+  // Self-application
+  const expr2 = setup('(\\x.x x) arg');
+  const expr3 = reduceStep(expr2, 1);
+
+  const fullInfo2 = getFullLinkingInfo(expr2, expr3, 1);
+  assert.strictEqual(fullInfo2.parameterUses.length, 2, 'Should have 2 parameter uses');
+  assert.strictEqual(fullInfo2.substitutedNodes.length, 2, 'Should have 2 substituted nodes');
+
+  // Discarded argument
+  const expr4 = setup('(\\x.y) arg');
+  const expr5 = reduceStep(expr4, 1);
+
+  const fullInfo3 = getFullLinkingInfo(expr4, expr5, 1);
+  assert.strictEqual(fullInfo3.parameterUses.length, 0, 'Should have 0 parameter uses');
+  assert.strictEqual(fullInfo3.substitutedNodes.length, 0, 'Should have 0 substituted nodes');
+  assert.strictEqual(fullInfo3.wasUsed, false, 'Variable was not used');
+
+  console.log('  ✓ getFullLinkingInfo test passed\n');
 }
 
 console.log('All tests passed! ✓');

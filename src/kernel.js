@@ -67,103 +67,161 @@ export class Application {
 // Parser
 // ============================================================================
 
+// Character predicates
+const isWhitespace = (char) => /\s/.test(char);
+const isLambdaStart = (char) => char === 'λ' || char === '\\';
+const isVariableStart = (char) => /[a-zA-Z]/.test(char);
+const isVariableChar = (char) => /[a-zA-Z0-9_']/.test(char);
+const isAtomStart = (char) => char === '(' || isLambdaStart(char) || isVariableStart(char);
+
+/**
+ * Parses lambda calculus expressions.
+ *
+ * Grammar:
+ *   expr     = atom+                    (left-associative application)
+ *   atom     = variable | '(' expr ')' | lambda
+ *   lambda   = ('λ' | '\') variable '.' expr
+ *   variable = [a-zA-Z][a-zA-Z0-9_']*
+ */
 class Parser {
   constructor(input) {
-    this.input = input.trim();
-    this.pos = 0;
+    this.source = input.trim();
+    this.position = 0;
   }
 
-  peek() {
-    return this.input[this.pos];
+  // Character access
+  currentChar() {
+    return this.source[this.position];
   }
 
-  consume() {
-    return this.input[this.pos++];
+  hasMore() {
+    return this.position < this.source.length;
   }
 
+  advance() {
+    const char = this.source[this.position];
+    this.position++;
+    return char;
+  }
+
+  // Skip over whitespace
   skipWhitespace() {
-    while (this.pos < this.input.length && /\s/.test(this.peek())) {
-      this.pos++;
+    while (this.hasMore() && isWhitespace(this.currentChar())) {
+      this.advance();
     }
   }
 
-  parseVariable() {
-    let name = '';
-    while (this.pos < this.input.length && /[a-zA-Z0-9_']/.test(this.peek())) {
-      name += this.consume();
-    }
-    if (name === '') {
-      throw new Error(`Expected variable at position ${this.pos}`);
-    }
-    return new Variable(name);
+  // Error reporting
+  error(message) {
+    const context = this.source.slice(Math.max(0, this.position - 10), this.position + 10);
+    const pointer = ' '.repeat(Math.min(10, this.position)) + '^';
+    return new Error(`${message} at position ${this.position}\n  ${context}\n  ${pointer}`);
   }
 
+  // Parse a variable name (one or more identifier characters)
+  parseVariableName() {
+    const startPosition = this.position;
+
+    while (this.hasMore() && isVariableChar(this.currentChar())) {
+      this.advance();
+    }
+
+    const name = this.source.slice(startPosition, this.position);
+
+    if (name.length === 0) {
+      throw this.error('Expected variable name');
+    }
+
+    return name;
+  }
+
+  // Parse an atom: variable, parenthesized expression, or lambda
   parseAtom() {
     this.skipWhitespace();
-    const ch = this.peek();
 
-    if (ch === '(') {
-      this.consume();
-      const expr = this.parseExpr();
+    const char = this.currentChar();
+
+    // Parenthesized expression
+    if (char === '(') {
+      this.advance(); // consume '('
+      const innerExpr = this.parseExpr();
       this.skipWhitespace();
-      if (this.peek() !== ')') {
-        throw new Error(`Expected ')' at position ${this.pos}`);
+
+      if (this.currentChar() !== ')') {
+        throw this.error("Expected ')'");
       }
-      this.consume();
-      return expr;
+      this.advance(); // consume ')'
+
+      return innerExpr;
     }
 
-    if (ch === 'λ' || ch === '\\') {
-      this.consume();
+    // Lambda abstraction
+    if (isLambdaStart(char)) {
+      this.advance(); // consume 'λ' or '\'
       this.skipWhitespace();
-      const param = this.parseVariable().name;
+
+      const parameterName = this.parseVariableName();
       this.skipWhitespace();
-      if (this.peek() !== '.') {
-        throw new Error(`Expected '.' after lambda parameter at position ${this.pos}`);
+
+      if (this.currentChar() !== '.') {
+        throw this.error("Expected '.' after lambda parameter");
       }
-      this.consume();
+      this.advance(); // consume '.'
+
       const body = this.parseExpr();
-      return new Abstraction(param, body);
+
+      return new Abstraction(parameterName, body);
     }
 
-    if (/[a-zA-Z]/.test(ch)) {
-      return this.parseVariable();
+    // Variable
+    if (isVariableStart(char)) {
+      const name = this.parseVariableName();
+      return new Variable(name);
     }
 
-    throw new Error(`Unexpected character '${ch}' at position ${this.pos}`);
+    throw this.error(`Unexpected character '${char}'`);
   }
 
+  // Parse an expression: one or more atoms combined via left-associative application
   parseExpr() {
     this.skipWhitespace();
-    let left = this.parseAtom();
 
+    let result = this.parseAtom();
+
+    // Collect additional atoms and combine via left-associative application
     while (true) {
       this.skipWhitespace();
-      const ch = this.peek();
-      if (ch === undefined || ch === ')') break;
-      if (ch === '(' || ch === 'λ' || ch === '\\' || /[a-zA-Z]/.test(ch)) {
-        const right = this.parseAtom();
-        left = new Application(left, right);
-      } else {
+
+      const char = this.currentChar();
+      const canContinue = this.hasMore() && char !== ')' && isAtomStart(char);
+
+      if (!canContinue) {
         break;
       }
+
+      const nextAtom = this.parseAtom();
+      result = new Application(result, nextAtom);
     }
 
-    return left;
+    return result;
   }
 
+  // Main entry point
   parse() {
     const result = this.parseExpr();
     this.skipWhitespace();
-    if (this.pos < this.input.length) {
-      throw new Error(`Unexpected character at position ${this.pos}`);
+
+    if (this.hasMore()) {
+      throw this.error('Unexpected character (expected end of input)');
     }
+
     return result;
   }
 }
 
 export function parse(input) {
-  return new Parser(input).parse();
+  const parser = new Parser(input);
+  return parser.parse();
 }
 
 // ============================================================================
@@ -358,8 +416,15 @@ export function toPlainString(expr) {
       return expr.name;
     case 'abstraction':
       return `λ${expr.param}.${toPlainString(expr.body)}`;
-    case 'application':
-      return `(${toPlainString(expr.func)} ${toPlainString(expr.arg)})`;
+    case 'application': {
+      // Wrap abstractions in parens to ensure correct round-tripping.
+      // Without this, `(λx.x) y` stringifies to `(λx.x y)` which parses as `λx.(x y)`.
+      const funcNeedsParens = expr.func.type === 'abstraction';
+      const argNeedsParens = expr.arg.type === 'abstraction';
+      const funcStr = funcNeedsParens ? `(${toPlainString(expr.func)})` : toPlainString(expr.func);
+      const argStr = argNeedsParens ? `(${toPlainString(expr.arg)})` : toPlainString(expr.arg);
+      return `(${funcStr} ${argStr})`;
+    }
   }
 }
 
@@ -392,6 +457,72 @@ export function isArgumentUsed(redexExpr) {
   if (!isRedex(redexExpr)) return false;
   const lambda = redexExpr.func;
   return variableAppearsIn(lambda.body, lambda.param);
+}
+
+/**
+ * Find all uses of a variable in an expression.
+ * Returns an array of Variable nodes that reference the given variable name.
+ * Respects shadowing (inner lambdas with same parameter name).
+ */
+export function findVariableUses(expr, varName) {
+  const uses = [];
+
+  function traverse(e) {
+    switch (e.type) {
+      case 'variable':
+        if (e.name === varName) {
+          uses.push(e);
+        }
+        break;
+      case 'abstraction':
+        // Stop if variable is shadowed
+        if (e.param !== varName) {
+          traverse(e.body);
+        }
+        break;
+      case 'application':
+        traverse(e.func);
+        traverse(e.arg);
+        break;
+    }
+  }
+
+  traverse(expr);
+  return uses;
+}
+
+/**
+ * For a redex, get the parameter uses in the lambda body.
+ * These are the Variable nodes that will be replaced during beta reduction.
+ * Returns an empty array if the redex is not valid or the variable is not used.
+ */
+export function getParameterUses(redexExpr) {
+  if (!isRedex(redexExpr)) return [];
+  const lambda = redexExpr.func;
+  return findVariableUses(lambda.body, lambda.param);
+}
+
+/**
+ * Get linking info extended with parameter uses.
+ * This adds the "middle" part of the substitution chain:
+ * source arg (yellow) -> parameter uses (blue) -> substituted results (red)
+ */
+export function getFullLinkingInfo(beforeExpr, afterExpr, reducedId) {
+  const redex = getRedex(beforeExpr, reducedId);
+  const sourceArg = redex ? redex.arg : null;
+  const wasUsed = redex ? isArgumentUsed(redex) : false;
+  const parameterUses = redex ? getParameterUses(redex) : [];
+  const substitutions = getSubstitutions(afterExpr);
+  const substitutedNodes = substitutions.get(reducedId) || [];
+
+  return {
+    sourceArg,
+    parameterUses,      // Variable nodes in lambda body (blue boxes)
+    substitutedNodes,   // Substituted expressions in result (red boxes)
+    sourceId: reducedId,
+    hasSubstitutions: substitutedNodes.length > 0,
+    wasUsed
+  };
 }
 
 // ============================================================================
