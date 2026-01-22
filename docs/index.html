@@ -289,14 +289,120 @@
     }
 
     const EXAMPLES = [
-      { name: 'Identity', description: 'The simplest function - returns its argument', expr: '(\\x.x) hello' },
-      { name: 'K Combinator', description: 'Takes two args, returns the first (TRUE)', expr: '(\\x.\\y.x) first second' },
-      { name: 'S Combinator', description: 'The universal combinator - substitution', expr: '(\\x.\\y.\\z.x z (y z)) a b c' },
-      { name: 'Church Numeral 2', description: 'Number 2 applied to successor and zero', expr: '(\\f.\\x.f (f x)) (\\n.succ n) zero' },
-      { name: 'Boolean AND', description: 'TRUE AND FALSE = FALSE', expr: '(\\p.\\q.p q p) (\\x.\\y.x) (\\x.\\y.y)' },
-      { name: 'Boolean OR', description: 'FALSE OR TRUE = TRUE', expr: '(\\p.\\q.p p q) (\\x.\\y.y) (\\x.\\y.x)' },
-      { name: 'Church Addition', description: 'Add 2 + 2 in Church numerals', expr: '(\\m.\\n.\\f.\\x.m f (n f x)) (\\f.\\x.f (f x)) (\\f.\\x.f (f x)) s z' },
-      { name: 'Omega', description: 'Self-application - infinite loop', expr: '(\\x.x x) (\\x.x x)' },
+      // ═══════════════════════════════════════════════════════════════════════
+      // BASIC COMBINATORS
+      // ═══════════════════════════════════════════════════════════════════════
+      { name: 'Identity (I)', description: 'The simplest function - returns its argument unchanged', expr: '(\\x.x) hello' },
+      { name: 'K Combinator', description: 'Returns first argument, discards second', expr: '(\\x.\\y.x) first second' },
+      { name: 'KI Combinator', description: 'Returns second argument, discards first', expr: '(\\x.\\y.y) first second' },
+      { name: 'S Combinator', description: 'Substitution: S f g x = f x (g x)', expr: '(\\f.\\g.\\x.f x (g x)) a b c' },
+      { name: 'B Combinator', description: 'Composition: B f g x = f (g x)', expr: '(\\f.\\g.\\x.f (g x)) outer inner arg' },
+      { name: 'C Combinator', description: 'Flip arguments: C f x y = f y x', expr: '(\\f.\\x.\\y.f y x) func first second' },
+      { name: 'W Combinator', description: 'Duplicate: W f x = f x x', expr: '(\\f.\\x.f x x) func arg' },
+      { name: 'SKK = I', description: 'SKK is equivalent to identity', expr: '(\\f.\\g.\\x.f x (g x)) (\\a.\\b.a) (\\a.\\b.a) test' },
+
+      // ═══════════════════════════════════════════════════════════════════════
+      // CHURCH BOOLEANS
+      // ═══════════════════════════════════════════════════════════════════════
+      { name: 'TRUE', description: 'Church boolean true: selects first argument', expr: '(\\x.\\y.x) yes no' },
+      { name: 'FALSE', description: 'Church boolean false: selects second argument', expr: '(\\x.\\y.y) yes no' },
+      { name: 'NOT TRUE', description: 'Logical negation: NOT TRUE = FALSE', expr: '(\\p.p (\\x.\\y.y) (\\x.\\y.x)) (\\x.\\y.x)' },
+      { name: 'NOT FALSE', description: 'Logical negation: NOT FALSE = TRUE', expr: '(\\p.p (\\x.\\y.y) (\\x.\\y.x)) (\\x.\\y.y)' },
+      { name: 'AND (T, F)', description: 'Logical AND: TRUE AND FALSE = FALSE', expr: '(\\p.\\q.p q p) (\\x.\\y.x) (\\x.\\y.y)' },
+      { name: 'AND (T, T)', description: 'Logical AND: TRUE AND TRUE = TRUE', expr: '(\\p.\\q.p q p) (\\x.\\y.x) (\\x.\\y.x)' },
+      { name: 'OR (F, T)', description: 'Logical OR: FALSE OR TRUE = TRUE', expr: '(\\p.\\q.p p q) (\\x.\\y.y) (\\x.\\y.x)' },
+      { name: 'OR (F, F)', description: 'Logical OR: FALSE OR FALSE = FALSE', expr: '(\\p.\\q.p p q) (\\x.\\y.y) (\\x.\\y.y)' },
+      { name: 'XOR (T, T)', description: 'Exclusive OR: TRUE XOR TRUE = FALSE', expr: '(\\p.\\q.p (q (\\x.\\y.y) (\\x.\\y.x)) q) (\\x.\\y.x) (\\x.\\y.x)' },
+      { name: 'XOR (T, F)', description: 'Exclusive OR: TRUE XOR FALSE = TRUE', expr: '(\\p.\\q.p (q (\\x.\\y.y) (\\x.\\y.x)) q) (\\x.\\y.x) (\\x.\\y.y)' },
+      { name: 'IF-THEN-ELSE', description: 'Conditional: IF TRUE THEN a ELSE b = a', expr: '(\\p.\\a.\\b.p a b) (\\x.\\y.x) then else' },
+
+      // ═══════════════════════════════════════════════════════════════════════
+      // CHURCH NUMERALS
+      // ═══════════════════════════════════════════════════════════════════════
+      { name: 'Zero (0)', description: 'Church numeral 0: apply f zero times', expr: '(\\f.\\x.x) s z' },
+      { name: 'One (1)', description: 'Church numeral 1: apply f once', expr: '(\\f.\\x.f x) s z' },
+      { name: 'Two (2)', description: 'Church numeral 2: apply f twice', expr: '(\\f.\\x.f (f x)) s z' },
+      { name: 'Three (3)', description: 'Church numeral 3: apply f three times', expr: '(\\f.\\x.f (f (f x))) s z' },
+      { name: 'SUCC 2', description: 'Successor function: SUCC 2 = 3', expr: '(\\n.\\f.\\x.f (n f x)) (\\f.\\x.f (f x)) s z' },
+      { name: 'ADD 2 + 2', description: 'Addition: 2 + 2 = 4', expr: '(\\m.\\n.\\f.\\x.m f (n f x)) (\\f.\\x.f (f x)) (\\f.\\x.f (f x)) s z' },
+      { name: 'ADD 2 + 3', description: 'Addition: 2 + 3 = 5', expr: '(\\m.\\n.\\f.\\x.m f (n f x)) (\\f.\\x.f (f x)) (\\f.\\x.f (f (f x))) s z' },
+      { name: 'MULT 2 × 3', description: 'Multiplication: 2 × 3 = 6', expr: '(\\m.\\n.\\f.m (n f)) (\\f.\\x.f (f x)) (\\f.\\x.f (f (f x))) s z' },
+      { name: 'MULT 2 × 2', description: 'Multiplication: 2 × 2 = 4', expr: '(\\m.\\n.\\f.m (n f)) (\\f.\\x.f (f x)) (\\f.\\x.f (f x)) s z' },
+      { name: 'EXP 2^3', description: 'Exponentiation: 2^3 = 8', expr: '(\\m.\\n.n m) (\\f.\\x.f (f x)) (\\f.\\x.f (f (f x))) s z' },
+      { name: 'EXP 3^2', description: 'Exponentiation: 3^2 = 9', expr: '(\\m.\\n.n m) (\\f.\\x.f (f (f x))) (\\f.\\x.f (f x)) s z' },
+      { name: 'ISZERO 0', description: 'Test if zero: ISZERO 0 = TRUE', expr: '(\\n.n (\\x.\\a.\\b.b) (\\a.\\b.a)) (\\f.\\x.x) yes no' },
+      { name: 'ISZERO 2', description: 'Test if zero: ISZERO 2 = FALSE', expr: '(\\n.n (\\x.\\a.\\b.b) (\\a.\\b.a)) (\\f.\\x.f (f x)) yes no' },
+
+      // ═══════════════════════════════════════════════════════════════════════
+      // PAIRS AND DATA STRUCTURES
+      // ═══════════════════════════════════════════════════════════════════════
+      { name: 'PAIR', description: 'Create a pair and extract with selector', expr: '(\\x.\\y.\\f.f x y) first second (\\a.\\b.a)' },
+      { name: 'FST', description: 'Extract first element of pair', expr: '(\\p.p (\\x.\\y.x)) ((\\a.\\b.\\f.f a b) first second)' },
+      { name: 'SND', description: 'Extract second element of pair', expr: '(\\p.p (\\x.\\y.y)) ((\\a.\\b.\\f.f a b) first second)' },
+      { name: 'SWAP', description: 'Swap elements of a pair', expr: '(\\p.(\\a.\\b.\\f.f a b) (p (\\x.\\y.y)) (p (\\x.\\y.x))) ((\\a.\\b.\\f.f a b) first second) (\\x.\\y.x)' },
+
+      // ═══════════════════════════════════════════════════════════════════════
+      // FIXED POINTS (NON-TERMINATING)
+      // ═══════════════════════════════════════════════════════════════════════
+      { name: 'Omega (ω)', description: 'Classic self-application loop: never terminates', expr: '(\\x.x x) (\\x.x x)' },
+      { name: 'Omega Variant', description: 'Same loop, different variable names', expr: '(\\x.x x) (\\y.y y)' },
+      { name: 'Big Omega (Ω)', description: 'Triple self-application: grows without bound', expr: '(\\x.x x x) (\\x.x x x)' },
+      { name: 'Huge Omega', description: 'Quadruple self-application: explodes rapidly', expr: '(\\x.x x x x) (\\x.x x x x)' },
+      { name: 'Y Combinator', description: 'Curry\'s fixed point combinator: Y f = f (Y f)', expr: '(\\f.(\\x.f (x x)) (\\x.f (x x))) g' },
+      { name: 'Y Applied', description: 'Y combinator unfolding one step', expr: '(\\x.(\\a.a) (x x)) (\\x.(\\a.a) (x x))' },
+      { name: 'Θ (Theta)', description: 'Turing\'s fixed point combinator', expr: '(\\x.\\f.f (x x f)) (\\x.\\f.f (x x f)) g' },
+      { name: 'Z Combinator', description: 'Call-by-value Y combinator variant', expr: '(\\f.(\\x.f (\\v.x x v)) (\\x.f (\\v.x x v))) g' },
+      { name: 'Simple Loop', description: 'The simplest infinite loop', expr: '(\\x.x x) (\\x.x x)' },
+      { name: 'Nested Omega', description: 'Omega with extra wrapping', expr: '(\\y.(\\x.x x) (\\x.x x)) dummy' },
+
+      // ═══════════════════════════════════════════════════════════════════════
+      // INTERESTING REDUCTIONS
+      // ═══════════════════════════════════════════════════════════════════════
+      { name: 'Multiple Substitution', description: 'Argument gets duplicated twice', expr: '(\\x.x x) (\\a.a)' },
+      { name: 'Triple Substitution', description: 'Argument gets duplicated three times', expr: '(\\x.x x x) (\\a.a)' },
+      { name: 'Discarded Argument', description: 'K combinator throws away the second arg', expr: '(\\x.\\y.x) keep discard' },
+      { name: 'Double Discard', description: 'Discards two arguments', expr: '(\\x.\\y.\\z.x) keep discard1 discard2' },
+      { name: 'Nested Reduction', description: 'Reduction inside a lambda body', expr: '\\outer.(\\inner.inner) value' },
+      { name: 'Deep Nesting', description: 'Multiple layers of reduction', expr: '\\a.\\b.(\\x.x) ((\\y.y) c)' },
+      { name: 'Composition Demo', description: 'Function composition: (f ∘ g)(x)', expr: '(\\f.\\g.\\x.f (g x)) (\\a.A a) (\\b.B b) input' },
+      { name: 'Church Succ Demo', description: 'Successor on 1 gives 2', expr: '(\\n.\\f.\\x.f (n f x)) (\\f.\\x.f x) s z' },
+
+      // ═══════════════════════════════════════════════════════════════════════
+      // ADVANCED / EXOTIC
+      // ═══════════════════════════════════════════════════════════════════════
+      { name: 'Church Pred', description: 'Predecessor function (complex!)', expr: '(\\n.\\f.\\x.n (\\g.\\h.h (g f)) (\\u.x) (\\u.u)) (\\f.\\x.f (f (f x))) s z' },
+      { name: 'PRED 1 = 0', description: 'Predecessor of 1 is 0', expr: '(\\n.\\f.\\x.n (\\g.\\h.h (g f)) (\\u.x) (\\u.u)) (\\f.\\x.f x) s z' },
+      { name: 'Factorial Setup', description: 'Factorial-like recursion structure', expr: '(\\f.(\\x.f (x x)) (\\x.f (x x))) (\\rec.\\n.n)' },
+      { name: 'Self-Apply Identity', description: 'Apply identity to itself', expr: '(\\x.x) (\\y.y)' },
+      { name: 'Reverse Application', description: 'Apply argument to function', expr: '(\\f.\\x.x f) (\\a.a) func' },
+      { name: 'Mockingbird (M)', description: 'Self-application combinator: M f = f f', expr: '(\\f.f f) (\\x.x)' },
+      { name: 'Mockingbird on K', description: 'M K produces interesting behavior', expr: '(\\f.f f) (\\x.\\y.x)' },
+      { name: 'Kestrel & Mockingbird', description: 'K M ω - mixing combinators', expr: '(\\x.\\y.x) (\\f.f f) (\\x.x x)' },
+      { name: 'Starling Dance', description: 'S I I x = x x (self-application)', expr: '(\\f.\\g.\\x.f x (g x)) (\\a.a) (\\b.b) y' },
+      { name: 'Eta Expansion', description: 'λx.f x is extensionally equal to f', expr: '(\\x.(\\y.y) x) arg' },
+
+      // ═══════════════════════════════════════════════════════════════════════
+      // MULTI-REDEX EXPRESSIONS (3+ reduction choices)
+      // ═══════════════════════════════════════════════════════════════════════
+      { name: 'Triple Redex', description: '3 simultaneous reduction choices', expr: '((\\a.a) x) ((\\b.b) y) ((\\c.c) z)' },
+      { name: 'Four Redexes', description: '4 simultaneous reduction options', expr: '((\\a.a) w) ((\\b.b) x) ((\\c.c) y) ((\\d.d) z)' },
+      { name: 'Five Redexes', description: '5 simultaneous reductions to choose from', expr: '((\\a.a) v) ((\\b.b) w) ((\\c.c) x) ((\\d.d) y) ((\\e.e) z)' },
+      { name: 'Nested Multi', description: '4 redexes at different nesting levels', expr: '(\\f.f ((\\a.a) x)) ((\\b.b) ((\\c.c) y))' },
+      { name: 'Parallel Apps', description: '3 independent applications', expr: '\\result.((\\a.a a) p) ((\\b.b b) q) ((\\c.c c) r)' },
+      { name: 'Deep Multi-Redex', description: '5 nested redexes', expr: '(\\a.(\\b.(\\c.(\\d.(\\e.e) five) four) three) two) one' },
+      { name: 'Wide Expression', description: '6 redexes in a row', expr: '((\\a.a) A) ((\\b.b) B) ((\\c.c) C) ((\\d.d) D) ((\\e.e) E) ((\\f.f) F)' },
+      { name: 'Complex S', description: 'S combinator with multiple internal redexes', expr: '(\\x.\\y.\\z.x z (y z)) ((\\a.a) f) ((\\b.b) g) ((\\c.c) h)' },
+      { name: 'Many-Armed', description: '4 different paths through reduction', expr: '((\\x.x) ((\\a.a) p)) ((\\y.y) ((\\b.b) q))' },
+      { name: 'Combinator Mix', description: 'Multiple combinators ready to fire', expr: '((\\x.x) I) ((\\a.\\b.a) K) ((\\p.\\q.q) F) arg' },
+
+      // ═══════════════════════════════════════════════════════════════════════
+      // CHALLENGING EXPRESSIONS
+      // ═══════════════════════════════════════════════════════════════════════
+      { name: 'Church 2+3+1', description: 'Multiple additions: (2+3)+1 = 6', expr: '(\\m.\\n.\\f.\\x.m f (n f x)) ((\\m.\\n.\\f.\\x.m f (n f x)) (\\f.\\x.f (f x)) (\\f.\\x.f (f (f x)))) (\\f.\\x.f x) s z' },
+      { name: 'Boolean Chain', description: 'AND (OR TRUE FALSE) TRUE', expr: '(\\p.\\q.p q p) ((\\p.\\q.p p q) (\\x.\\y.x) (\\x.\\y.y)) (\\x.\\y.x)' },
+      { name: 'Pair of Pairs', description: 'Nested pair structure', expr: '(\\x.\\y.\\f.f x y) ((\\a.\\b.\\g.g a b) one two) ((\\c.\\d.\\h.h c d) three four) (\\p.\\q.p)' },
+      { name: 'SUCC (SUCC 2)', description: 'Successor twice: SUCC(SUCC 2) = 4', expr: '(\\n.\\f.\\x.f (n f x)) ((\\n.\\f.\\x.f (n f x)) (\\f.\\x.f (f x))) s z' },
+      { name: 'Fibonacci Setup', description: 'Structure for computing Fibonacci', expr: '(\\f.(\\x.f (x x)) (\\x.f (x x))) (\\rec.\\n.\\a.\\b.n a (rec (\\f.\\x.x) b (a b)))' },
     ];
 
     // ============================================================================
