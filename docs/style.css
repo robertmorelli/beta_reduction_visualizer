@@ -70,6 +70,18 @@ body {
   box-shadow: 3px 3px 0 rgba(0, 191, 255, 0.5);
 }
 
+.header-btn.primary {
+  background: var(--color-0);
+  color: #000;
+  font-weight: 500;
+  box-shadow: 2px 2px 0 rgba(0, 255, 127, 0.5);
+}
+
+.header-btn.primary:hover {
+  background: var(--color-5);
+  box-shadow: 3px 3px 0 rgba(64, 224, 208, 0.6);
+}
+
 /* Conversation area */
 .conversation {
   flex: 1;
@@ -116,6 +128,36 @@ body {
 
 .reduction-info {
   color: var(--text-muted);
+}
+
+/* Discarded argument indicator - shown when arg wasn't used */
+.discarded-arg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--substitution-bg);
+  padding: 2px 6px;
+  margin-left: 8px;
+  font-size: 11px;
+  color: #e0e0e0;
+  cursor: help;
+  box-shadow: 1px 1px 0 rgba(139, 0, 0, 0.4);
+  border: 1px solid #6a2020;
+}
+
+.discarded-arg .discarded-label {
+  color: #ff6b6b;
+  font-weight: 500;
+}
+
+.discarded-arg code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 4px;
+  font-family: inherit;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Expression content - using pre for monospace alignment */
@@ -358,18 +400,20 @@ body {
 .redex-indicator.depth-5 { background: var(--color-5); color: #000; box-shadow: 1px 1px 0 rgba(64, 224, 208, 0.5); }
 .redex-indicator.depth-6 { background: var(--color-6); color: #fff; box-shadow: 1px 1px 0 rgba(60, 179, 113, 0.5); }
 
-/* Substitution box - wraps entire substituted argument */
+/* Substitution box - wraps entire substituted argument (red = came from a reduction) */
 .substitution-box {
   display: inline;
   background: var(--substitution-bg);
   padding: 2px 4px;
   box-shadow: 2px 2px 0 rgba(139, 0, 0, 0.4);
   cursor: pointer;
+  border: 1px solid #6a2020;
 }
 
 .substitution-box.highlight {
   background: var(--substitution-highlight);
   box-shadow: 3px 3px 0 rgba(139, 0, 0, 0.6);
+  border: 1px solid #8a3030;
 }
 
 /* Func and arg wrappers for applications */
@@ -377,17 +421,20 @@ body {
   display: inline;
 }
 
-/* Source highlight in previous step (yellow box) */
+/* Source highlight in previous step (yellow box) - the SOURCE of a substitution */
 .source-highlight {
   background: var(--source-bg) !important;
   box-shadow: 2px 2px 0 rgba(154, 154, 0, 0.5) !important;
-  padding: 2px 4px;
+  padding: 4px 6px;
+  border: 2px solid #9a9a00;
+  margin: 1px;
 }
 
 /* Source highlight hover state (when hovering corresponding red box) */
 .source-hover {
   background: #4a4a15 !important;
-  box-shadow: 3px 3px 0 rgba(200, 200, 0, 0.7) !important;
+  box-shadow: 4px 4px 0 rgba(200, 200, 0, 0.8) !important;
+  border: 2px solid #d4d400;
 }
 
 /* Scrollbar styling */

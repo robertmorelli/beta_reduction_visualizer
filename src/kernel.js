@@ -364,6 +364,168 @@ export function toPlainString(expr) {
 }
 
 // ============================================================================
+// Variable Usage Detection
+// ============================================================================
+
+/**
+ * Check if a variable appears free in an expression.
+ * Used to detect when a lambda argument will be discarded.
+ */
+export function variableAppearsIn(expr, varName) {
+  switch (expr.type) {
+    case 'variable':
+      return expr.name === varName;
+    case 'abstraction':
+      // Variable is shadowed if it matches the parameter
+      if (expr.param === varName) return false;
+      return variableAppearsIn(expr.body, varName);
+    case 'application':
+      return variableAppearsIn(expr.func, varName) || variableAppearsIn(expr.arg, varName);
+  }
+}
+
+/**
+ * For a redex (application where func is abstraction), check if the
+ * bound variable is used in the body. If not, the argument will be discarded.
+ */
+export function isArgumentUsed(redexExpr) {
+  if (!isRedex(redexExpr)) return false;
+  const lambda = redexExpr.func;
+  return variableAppearsIn(lambda.body, lambda.param);
+}
+
+// ============================================================================
+// Linking Logic - for tracing substitutions across reduction steps
+// ============================================================================
+
+/**
+ * Get all substituted subtrees in an expression, grouped by their source redex.
+ * Returns a Map from sourceId to array of expression nodes.
+ */
+export function getSubstitutions(expr) {
+  const substitutions = new Map();
+
+  function traverse(e, inSubstitution = false) {
+    // If this node starts a substitution (not already inside one)
+    if (e.fromSubstitution && !inSubstitution) {
+      const sourceId = e.sourceId;
+      if (!substitutions.has(sourceId)) {
+        substitutions.set(sourceId, []);
+      }
+      substitutions.get(sourceId).push(e);
+      // Mark that we're now inside a substitution
+      inSubstitution = true;
+    }
+
+    switch (e.type) {
+      case 'variable':
+        break;
+      case 'abstraction':
+        traverse(e.body, inSubstitution);
+        break;
+      case 'application':
+        traverse(e.func, inSubstitution);
+        traverse(e.arg, inSubstitution);
+        break;
+    }
+  }
+
+  traverse(expr);
+  return substitutions;
+}
+
+/**
+ * Get the argument expression for a specific redex ID in an expression.
+ * Returns null if the redex is not found.
+ */
+export function getRedexArg(expr, redexId) {
+  function find(e) {
+    switch (e.type) {
+      case 'variable':
+        return null;
+      case 'abstraction':
+        return find(e.body);
+      case 'application':
+        if (e.id === redexId && isRedex(e)) {
+          return e.arg;
+        }
+        return find(e.func) || find(e.arg);
+    }
+  }
+  return find(expr);
+}
+
+/**
+ * Get the full redex expression (the application) for a specific redex ID.
+ * Returns null if the redex is not found.
+ */
+export function getRedex(expr, redexId) {
+  function find(e) {
+    switch (e.type) {
+      case 'variable':
+        return null;
+      case 'abstraction':
+        return find(e.body);
+      case 'application':
+        if (e.id === redexId && isRedex(e)) {
+          return e;
+        }
+        return find(e.func) || find(e.arg);
+    }
+  }
+  return find(expr);
+}
+
+/**
+ * Get linking info between two consecutive steps.
+ * Given the expression before reduction and the redex that was reduced,
+ * returns info about what was substituted.
+ *
+ * @param {Object} beforeExpr - Expression before reduction (with redex IDs)
+ * @param {Object} afterExpr - Expression after reduction (with substitution marks)
+ * @param {number} reducedId - The redex ID that was reduced
+ * @returns {Object} Linking info: { sourceArg, substitutedNodes, wasUsed }
+ */
+export function getLinkingInfo(beforeExpr, afterExpr, reducedId) {
+  const redex = getRedex(beforeExpr, reducedId);
+  const sourceArg = redex ? redex.arg : null;
+  const wasUsed = redex ? isArgumentUsed(redex) : false;
+  const substitutions = getSubstitutions(afterExpr);
+  const substitutedNodes = substitutions.get(reducedId) || [];
+
+  return {
+    sourceArg,
+    substitutedNodes,
+    sourceId: reducedId,
+    hasSubstitutions: substitutedNodes.length > 0,
+    wasUsed  // true if the variable was used in the body, false if discarded
+  };
+}
+
+/**
+ * Build a complete chain of substitution links across all steps.
+ * Each step contains: { expr, reducedId, linkingInfo }
+ *
+ * @param {Array} steps - Array of { expr, reducedId } objects
+ * @returns {Array} Steps with linking info added
+ */
+export function buildLinkingChain(steps) {
+  return steps.map((step, index) => {
+    let linkingInfo = null;
+
+    if (index > 0 && step.reducedId !== null) {
+      const prevExpr = steps[index - 1].expr;
+      linkingInfo = getLinkingInfo(prevExpr, step.expr, step.reducedId);
+    }
+
+    return {
+      ...step,
+      linkingInfo
+    };
+  });
+}
+
+// ============================================================================
 // Example Expressions
 // ============================================================================
 

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Drop shadow -->
+  <rect x="4" y="4" width="26" height="26" fill="rgba(0, 191, 255, 0.4)" rx="1"/>
+  <!-- Blue box (header/accent color) -->
+  <rect x="1" y="1" width="26" height="26" fill="#00BFFF" stroke="#0099cc" stroke-width="2" rx="1"/>
+  <!-- Lambda symbol -->
+  <text x="14" y="22" font-family="Georgia, serif" font-size="20" font-weight="bold" fill="#1a1a1a" text-anchor="middle">λ</text>
+</svg>

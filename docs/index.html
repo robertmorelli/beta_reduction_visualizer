@@ -4,13 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Lambda Calculus Beta Reducer</title>
+  <link rel="icon" type="image/svg+xml" href="favicon-green.svg">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="header">
     <h1>Lambda Calculus Beta Reducer</h1>
     <div class="header-actions">
-      <button class="header-btn" onclick="showExamples()">Examples</button>
+      <button class="header-btn primary" onclick="showExamples()">Examples</button>
       <button class="header-btn" onclick="resetConversation()">Clear</button>
     </div>
   </div>
@@ -302,12 +303,56 @@
     // Web UI - Chat-like Interface
     // ============================================================================
 
+    // ============================================================================
+    // Variable Usage Detection (for discarded arg indicator)
+    // ============================================================================
+
+    function variableAppearsIn(expr, varName) {
+      switch (expr.type) {
+        case 'variable':
+          return expr.name === varName;
+        case 'abstraction':
+          if (expr.param === varName) return false;
+          return variableAppearsIn(expr.body, varName);
+        case 'application':
+          return variableAppearsIn(expr.func, varName) || variableAppearsIn(expr.arg, varName);
+      }
+    }
+
+    function isArgumentUsed(redexExpr) {
+      if (!isRedex(redexExpr)) return false;
+      const lambda = redexExpr.func;
+      return variableAppearsIn(lambda.body, lambda.param);
+    }
+
+    function getRedex(expr, redexId) {
+      function find(e) {
+        switch (e.type) {
+          case 'variable': return null;
+          case 'abstraction': return find(e.body);
+          case 'application':
+            if (e.id === redexId && isRedex(e)) return e;
+            return find(e.func) || find(e.arg);
+        }
+      }
+      return find(expr);
+    }
+
+    // ============================================================================
+    // Web UI - Chat-like Interface
+    // ============================================================================
+
     // Global state
-    let steps = []; // Array of { expr, exprString, reducedId, stepNum }
+    // Steps include: expr, exprString, reducedId, stepNum, discardedArg (if arg wasn't used)
+    let steps = [];
     let currentExpr = null;
 
     function getDepthClass(depth) {
       return `depth-${depth % 7}`;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     // Render expression to HTML string (for use inside pre element)
@@ -366,9 +411,14 @@
 
           const argWrapper = document.createElement('span');
           argWrapper.className = 'arg';
-          // If next step reduced this redex, highlight the argument as source
-          if (expr.id !== null && expr.id === nextReducedId) {
-            argWrapper.classList.add('source-highlight');
+          // Add data attributes for linking if this is a redex
+          if (expr.id !== null) {
+            argWrapper.dataset.redexId = expr.id;
+            argWrapper.dataset.stepIndex = stepIndex;
+            // If next step reduced this redex, highlight the argument as source
+            if (expr.id === nextReducedId) {
+              argWrapper.classList.add('source-highlight');
+            }
           }
           argWrapper.appendChild(renderExprToHTML(expr.arg, depth + 1, stepIndex, inSubstitution, nextReducedId, redexClickHandler));
 
@@ -415,6 +465,15 @@
         info.className = 'reduction-info';
         info.textContent = `reduced [${step.reducedId}]`;
         header.appendChild(info);
+
+        // Show discarded arg indicator if the argument wasn't used
+        if (step.discardedArg !== null) {
+          const discarded = document.createElement('span');
+          discarded.className = 'discarded-arg';
+          discarded.title = 'Argument not used in function body (discarded)';
+          discarded.innerHTML = `<span class="discarded-label">discarded:</span> <code>${escapeHtml(step.discardedArg)}</code>`;
+          header.appendChild(discarded);
+        }
       }
 
       msg.appendChild(header);
@@ -491,12 +550,22 @@
     }
 
     function setupSubstitutionHover() {
-      // Hover on substitution boxes highlights:
+      // Clear all highlights helper
+      function clearHighlights() {
+        document.querySelectorAll('.substitution-box.highlight').forEach(s => {
+          s.classList.remove('highlight');
+        });
+        document.querySelectorAll('.source-hover').forEach(s => {
+          s.classList.remove('source-hover');
+        });
+      }
+
+      // Hover on RED boxes highlights:
       // 1. All red boxes from the same source in the same step
       // 2. The corresponding yellow source box in the previous step
-      const boxes = document.querySelectorAll('.substitution-box');
-      boxes.forEach(el => {
-        const sourceId = parseInt(el.dataset.sourceId);
+      const redBoxes = document.querySelectorAll('.substitution-box');
+      redBoxes.forEach(el => {
+        const sourceId = el.dataset.sourceId;
         const stepIndex = parseInt(el.dataset.stepIndex);
 
         el.addEventListener('mouseenter', () => {
@@ -506,36 +575,41 @@
           });
 
           // Highlight the corresponding yellow source box in previous step
+          // The sourceId tells us which redex was reduced to create this substitution
+          // That redex existed in step (stepIndex - 1) with id = sourceId
           if (stepIndex > 0) {
-            const prevMessage = document.querySelector(`.message[data-step-index="${stepIndex - 1}"]`);
-            if (prevMessage) {
-              // Find the .arg.source-highlight that corresponds to this sourceId
-              // The sourceId is the redex ID, so find the redex indicator and its .arg sibling
-              const indicators = prevMessage.querySelectorAll('.redex-indicator');
-              indicators.forEach(ind => {
-                if (parseInt(ind.textContent) === sourceId) {
-                  // Walk back to find the .arg wrapper
-                  let node = ind.previousSibling;
-                  while (node && (node.nodeType === 3 || (node.classList && node.classList.contains('paren')))) {
-                    node = node.previousSibling;
-                  }
-                  if (node && node.classList && node.classList.contains('arg')) {
-                    node.classList.add('source-hover');
-                  }
-                }
-              });
+            const prevStepIndex = stepIndex - 1;
+            // Find the arg wrapper for that redex in the previous step
+            const sourceArg = document.querySelector(`.arg[data-redex-id="${sourceId}"][data-step-index="${prevStepIndex}"]`);
+            if (sourceArg) {
+              sourceArg.classList.add('source-hover');
             }
           }
         });
 
-        el.addEventListener('mouseleave', () => {
-          document.querySelectorAll('.substitution-box.highlight').forEach(s => {
-            s.classList.remove('highlight');
-          });
-          document.querySelectorAll('.source-hover').forEach(s => {
-            s.classList.remove('source-hover');
-          });
+        el.addEventListener('mouseleave', clearHighlights);
+      });
+
+      // Hover on YELLOW boxes highlights:
+      // All corresponding red boxes in the next step
+      const yellowBoxes = document.querySelectorAll('.source-highlight');
+      yellowBoxes.forEach(el => {
+        el.addEventListener('mouseenter', () => {
+          const redexId = el.dataset.redexId;
+          const stepIndex = parseInt(el.dataset.stepIndex);
+
+          if (redexId !== undefined) {
+            const nextStepIndex = stepIndex + 1;
+            // Highlight all red boxes in next step that came from this redex
+            document.querySelectorAll(`.substitution-box[data-source-id="${redexId}"][data-step-index="${nextStepIndex}"]`).forEach(s => {
+              s.classList.add('highlight');
+            });
+          }
+          // Also highlight this yellow box
+          el.classList.add('source-hover');
         });
+
+        el.addEventListener('mouseleave', clearHighlights);
       });
     }
 
@@ -546,6 +620,11 @@
       currentExpr = clearSubstitutionMarks(currentExpr);
       currentExpr = numberRedexes(currentExpr);
 
+      // Check if the argument will be used (before reducing)
+      const redex = getRedex(currentExpr, id);
+      const wasUsed = redex ? isArgumentUsed(redex) : true;
+      const discardedArg = !wasUsed && redex ? toPlainString(redex.arg) : null;
+
       // Perform reduction - this adds substitution marks
       currentExpr = reduceAt(currentExpr, id);
       currentExpr = numberRedexes(currentExpr);
@@ -555,7 +634,8 @@
         expr: currentExpr,
         exprString: toPlainString(currentExpr),
         reducedId: id,
-        stepNum: steps.length
+        stepNum: steps.length,
+        discardedArg  // null if used, otherwise the string representation
       });
 
       renderConversation();

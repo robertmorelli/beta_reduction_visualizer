@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Drop shadow -->
+  <rect x="4" y="4" width="26" height="26" fill="rgba(139, 0, 0, 0.5)" rx="1"/>
+  <!-- Red box (substitution color) -->
+  <rect x="1" y="1" width="26" height="26" fill="#3d1010" stroke="#6a2020" stroke-width="2" rx="1"/>
+  <!-- Lambda symbol -->
+  <text x="14" y="22" font-family="Georgia, serif" font-size="20" font-weight="bold" fill="#e0e0e0" text-anchor="middle">λ</text>
+</svg>
