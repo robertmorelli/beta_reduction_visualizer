@@ -1,319 +1,21 @@
+#!/usr/bin/env node
+// ============================================================================
+// Lambda Calculus CLI - Terminal Visualizer with Colored Output
+// ============================================================================
+
 import chalk from 'chalk';
 import * as readline from 'readline';
+import {
+  parse,
+  numberRedexes,
+  clearSubstitutionMarks,
+  reduceAt,
+  getRedexCount,
+  EXAMPLES
+} from './kernel.js';
 
 // ============================================================================
-// AST Node Types
-// ============================================================================
-
-class Variable {
-  constructor(name, fromSubstitution = false) {
-    this.type = 'variable';
-    this.name = name;
-    this.fromSubstitution = fromSubstitution;
-  }
-
-  clone(fromSubstitution = false) {
-    return new Variable(this.name, fromSubstitution || this.fromSubstitution);
-  }
-}
-
-class Abstraction {
-  constructor(param, body, fromSubstitution = false) {
-    this.type = 'abstraction';
-    this.param = param;
-    this.body = body;
-    this.fromSubstitution = fromSubstitution;
-  }
-
-  clone(fromSubstitution = false) {
-    return new Abstraction(
-      this.param,
-      this.body.clone(fromSubstitution),
-      fromSubstitution || this.fromSubstitution
-    );
-  }
-}
-
-class Application {
-  constructor(func, arg, id = null, fromSubstitution = false) {
-    this.type = 'application';
-    this.func = func;
-    this.arg = arg;
-    this.id = id;
-    this.fromSubstitution = fromSubstitution;
-  }
-
-  clone(fromSubstitution = false) {
-    return new Application(
-      this.func.clone(fromSubstitution),
-      this.arg.clone(fromSubstitution),
-      this.id,
-      fromSubstitution || this.fromSubstitution
-    );
-  }
-}
-
-// ============================================================================
-// Parser
-// ============================================================================
-
-class Parser {
-  constructor(input) {
-    this.input = input.trim();
-    this.pos = 0;
-  }
-
-  peek() {
-    return this.input[this.pos];
-  }
-
-  consume() {
-    return this.input[this.pos++];
-  }
-
-  skipWhitespace() {
-    while (this.pos < this.input.length && /\s/.test(this.peek())) {
-      this.pos++;
-    }
-  }
-
-  parseVariable() {
-    let name = '';
-    while (this.pos < this.input.length && /[a-zA-Z0-9_']/.test(this.peek())) {
-      name += this.consume();
-    }
-    if (name === '') {
-      throw new Error(`Expected variable at position ${this.pos}`);
-    }
-    return new Variable(name);
-  }
-
-  parseAtom() {
-    this.skipWhitespace();
-    const ch = this.peek();
-
-    if (ch === '(') {
-      this.consume();
-      const expr = this.parseExpr();
-      this.skipWhitespace();
-      if (this.peek() !== ')') {
-        throw new Error(`Expected ')' at position ${this.pos}`);
-      }
-      this.consume();
-      return expr;
-    }
-
-    if (ch === 'λ' || ch === '\\') {
-      this.consume();
-      this.skipWhitespace();
-      const param = this.parseVariable().name;
-      this.skipWhitespace();
-      if (this.peek() !== '.') {
-        throw new Error(`Expected '.' after lambda parameter at position ${this.pos}`);
-      }
-      this.consume();
-      const body = this.parseExpr();
-      return new Abstraction(param, body);
-    }
-
-    if (/[a-zA-Z]/.test(ch)) {
-      return this.parseVariable();
-    }
-
-    throw new Error(`Unexpected character '${ch}' at position ${this.pos}`);
-  }
-
-  parseExpr() {
-    this.skipWhitespace();
-    let left = this.parseAtom();
-
-    while (true) {
-      this.skipWhitespace();
-      const ch = this.peek();
-      if (ch === undefined || ch === ')') break;
-      if (ch === '(' || ch === 'λ' || ch === '\\' || /[a-zA-Z]/.test(ch)) {
-        const right = this.parseAtom();
-        left = new Application(left, right);
-      } else {
-        break;
-      }
-    }
-
-    return left;
-  }
-
-  parse() {
-    const result = this.parseExpr();
-    this.skipWhitespace();
-    if (this.pos < this.input.length) {
-      throw new Error(`Unexpected character at position ${this.pos}`);
-    }
-    return result;
-  }
-}
-
-function parse(input) {
-  return new Parser(input).parse();
-}
-
-// ============================================================================
-// Beta Reduction
-// ============================================================================
-
-function freeVariables(expr) {
-  switch (expr.type) {
-    case 'variable':
-      return new Set([expr.name]);
-    case 'abstraction':
-      const bodyFree = freeVariables(expr.body);
-      bodyFree.delete(expr.param);
-      return bodyFree;
-    case 'application':
-      const funcFree = freeVariables(expr.func);
-      const argFree = freeVariables(expr.arg);
-      return new Set([...funcFree, ...argFree]);
-  }
-}
-
-function freshName(name, avoid) {
-  let fresh = name;
-  while (avoid.has(fresh)) {
-    fresh += "'";
-  }
-  return fresh;
-}
-
-function substitute(expr, varName, replacement, markAsSubstituted = true) {
-  switch (expr.type) {
-    case 'variable':
-      if (expr.name === varName) {
-        return replacement.clone(markAsSubstituted);
-      }
-      return expr;
-
-    case 'abstraction':
-      if (expr.param === varName) {
-        return expr;
-      }
-      const replFree = freeVariables(replacement);
-      if (replFree.has(expr.param)) {
-        const allFree = new Set([...replFree, ...freeVariables(expr.body)]);
-        allFree.add(varName);
-        const newParam = freshName(expr.param, allFree);
-        const renamedBody = substitute(expr.body, expr.param, new Variable(newParam), false);
-        return new Abstraction(
-          newParam,
-          substitute(renamedBody, varName, replacement, markAsSubstituted),
-          expr.fromSubstitution
-        );
-      }
-      return new Abstraction(
-        expr.param,
-        substitute(expr.body, varName, replacement, markAsSubstituted),
-        expr.fromSubstitution
-      );
-
-    case 'application':
-      return new Application(
-        substitute(expr.func, varName, replacement, markAsSubstituted),
-        substitute(expr.arg, varName, replacement, markAsSubstituted),
-        expr.id,
-        expr.fromSubstitution
-      );
-  }
-}
-
-function isRedex(expr) {
-  return expr.type === 'application' && expr.func.type === 'abstraction';
-}
-
-function numberRedexes(expr, counter = { val: 1 }) {
-  switch (expr.type) {
-    case 'variable':
-      return expr;
-    case 'abstraction':
-      return new Abstraction(
-        expr.param,
-        numberRedexes(expr.body, counter),
-        expr.fromSubstitution
-      );
-    case 'application':
-      let id = null;
-      if (isRedex(expr)) {
-        id = counter.val++;
-      }
-      return new Application(
-        numberRedexes(expr.func, counter),
-        numberRedexes(expr.arg, counter),
-        id,
-        expr.fromSubstitution
-      );
-  }
-}
-
-function clearSubstitutionMarks(expr) {
-  switch (expr.type) {
-    case 'variable':
-      return new Variable(expr.name, false);
-    case 'abstraction':
-      return new Abstraction(expr.param, clearSubstitutionMarks(expr.body), false);
-    case 'application':
-      return new Application(
-        clearSubstitutionMarks(expr.func),
-        clearSubstitutionMarks(expr.arg),
-        expr.id,
-        false
-      );
-  }
-}
-
-function reduceAt(expr, targetId) {
-  switch (expr.type) {
-    case 'variable':
-      return expr;
-    case 'abstraction':
-      return new Abstraction(
-        expr.param,
-        reduceAt(expr.body, targetId),
-        expr.fromSubstitution
-      );
-    case 'application':
-      if (expr.id === targetId && isRedex(expr)) {
-        const lambda = expr.func;
-        const result = substitute(lambda.body, lambda.param, expr.arg, true);
-        return result;
-      }
-      return new Application(
-        reduceAt(expr.func, targetId),
-        reduceAt(expr.arg, targetId),
-        expr.id,
-        expr.fromSubstitution
-      );
-  }
-}
-
-function getRedexCount(expr) {
-  let count = 0;
-  function traverse(e) {
-    switch (e.type) {
-      case 'variable':
-        break;
-      case 'abstraction':
-        traverse(e.body);
-        break;
-      case 'application':
-        if (isRedex(e)) count++;
-        traverse(e.func);
-        traverse(e.arg);
-        break;
-    }
-  }
-  traverse(expr);
-  return count;
-}
-
-// ============================================================================
-// Colored Renderer
+// Rainbow Colors for Terminal
 // ============================================================================
 
 // Define colors with RGB values for filtering
@@ -328,7 +30,7 @@ const RAINBOW_COLORS_WITH_RGB = [
   { fn: chalk.hex('#3CB371'), r: 60, g: 179, b: 113 },   // medium sea green
 ];
 
-// Filter to only colors where red < green AND red < blue (should all pass, but verify)
+// Filter to only colors where red < green AND red < blue
 const RAINBOW_COLORS = RAINBOW_COLORS_WITH_RGB
   .filter(c => c.r < c.g && c.r < c.b)
   .map(c => c.fn);
@@ -339,6 +41,10 @@ const SUBSTITUTION_STYLE = chalk.bgRgb(100, 0, 0);
 function getColorForDepth(depth) {
   return RAINBOW_COLORS[depth % RAINBOW_COLORS.length];
 }
+
+// ============================================================================
+// Colored Renderer
+// ============================================================================
 
 // Internal render that returns both display string, plain string, and ID positions
 function renderInternal(expr, depth = 0) {
@@ -409,7 +115,7 @@ function renderInternal(expr, depth = 0) {
   }
 }
 
-function render(expr, depth = 0, showIds = true) {
+export function render(expr, depth = 0, showIds = true) {
   const result = renderInternal(expr, depth);
 
   // Build the ID line below the expression
@@ -437,63 +143,9 @@ function render(expr, depth = 0, showIds = true) {
   return result.display;
 }
 
-function renderPlain(expr) {
-  switch (expr.type) {
-    case 'variable':
-      return expr.name;
-    case 'abstraction':
-      return `λ${expr.param}.${renderPlain(expr.body)}`;
-    case 'application':
-      return `(${renderPlain(expr.func)} ${renderPlain(expr.arg)})`;
-  }
-}
-
 // ============================================================================
 // Interactive REPL
 // ============================================================================
-
-const EXAMPLES = [
-  {
-    name: 'Identity',
-    description: 'The simplest function - returns its argument',
-    expr: '(\\x.x) hello'
-  },
-  {
-    name: 'K Combinator',
-    description: 'Takes two args, returns the first (TRUE in Church encoding)',
-    expr: '(\\x.\\y.x) first second'
-  },
-  {
-    name: 'S Combinator',
-    description: 'The universal combinator - substitution',
-    expr: '(\\x.\\y.\\z.x z (y z)) a b c'
-  },
-  {
-    name: 'Church Numeral 2',
-    description: 'Number 2 applied to successor and zero',
-    expr: '(\\f.\\x.f (f x)) (\\n.succ n) zero'
-  },
-  {
-    name: 'Boolean AND',
-    description: 'TRUE AND FALSE = FALSE',
-    expr: '(\\p.\\q.p q p) (\\x.\\y.x) (\\x.\\y.y)'
-  },
-  {
-    name: 'Boolean OR',
-    description: 'FALSE OR TRUE = TRUE',
-    expr: '(\\p.\\q.p p q) (\\x.\\y.y) (\\x.\\y.x)'
-  },
-  {
-    name: 'Church Addition',
-    description: 'Add 2 + 2 in Church numerals',
-    expr: '(\\m.\\n.\\f.\\x.m f (n f x)) (\\f.\\x.f (f x)) (\\f.\\x.f (f x)) s z'
-  },
-  {
-    name: 'Omega',
-    description: 'Self-application - infinite loop (careful!)',
-    expr: '(\\x.x x) (\\x.x x)'
-  },
-];
 
 function printBanner() {
   console.log(chalk.cyan(`

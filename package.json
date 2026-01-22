@@ -1,11 +1,17 @@
 {
   "name": "beta-visualizer",
   "version": "1.0.0",
-  "description": "Lambda calculus beta reduction visualizer with colored terminal output",
-  "main": "index.js",
+  "description": "Lambda calculus beta reduction visualizer with colored terminal output and web UI",
+  "main": "src/kernel.js",
   "type": "module",
+  "exports": {
+    ".": "./src/kernel.js",
+    "./kernel": "./src/kernel.js",
+    "./cli": "./src/cli.js"
+  },
   "scripts": {
-    "start": "node index.js"
+    "start": "node src/cli.js",
+    "cli": "node src/cli.js"
   },
   "dependencies": {
     "chalk": "^5.3.0",

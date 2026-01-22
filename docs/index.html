@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lambda Calculus Beta Reducer</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    :root {
+      --color-0: #00FF7F;
+      --color-1: #00FFFF;
+      --color-2: #00BFFF;
+      --color-3: #1E90FF;
+      --color-4: #6495ED;
+      --color-5: #40E0D0;
+      --color-6: #3CB371;
+      /* Darker versions for backgrounds */
+      --bg-0: #0a3320;
+      --bg-1: #0a3333;
+      --bg-2: #0a2633;
+      --bg-3: #0a1a33;
+      --bg-4: #141d30;
+      --bg-5: #0f2d2a;
+      --bg-6: #102920;
+      --substitution-bg: #3d1010;
+      --substitution-highlight: #5a1818;
+      --source-bg: #3d3d10;
+      --bg-color: #1a1a1a;
+      --panel-bg: #242424;
+      --text-color: #e0e0e0;
+      --text-muted: #888;
+      --border-color: #333;
+    }
+
+    body {
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+      background: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      padding: 15px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--color-2);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .header-btn {
+      background: var(--panel-bg);
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 12px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+      transition: all 0.2s;
+      box-shadow: 2px 2px 0 rgba(0, 191, 255, 0.3);
+    }
+
+    .header-btn:hover {
+      color: var(--color-2);
+      box-shadow: 3px 3px 0 rgba(0, 191, 255, 0.5);
+    }
+
+    .conversation {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .message {
+      background: var(--panel-bg);
+      border: none;
+      padding: 16px;
+      position: relative;
+      box-shadow: 3px 3px 0 rgba(0, 191, 255, 0.2);
+    }
+
+    .message.system-message {
+      background: transparent;
+      border: 1px dashed var(--border-color);
+      box-shadow: none;
+      color: var(--text-muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .message-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .step-badge {
+      background: var(--color-2);
+      color: #000;
+      padding: 2px 8px;
+      font-weight: 600;
+      font-size: 11px;
+    }
+
+    .reduction-info {
+      color: var(--text-muted);
+    }
+
+    .expression-content {
+      font-size: 16px;
+      line-height: 2.2;
+      overflow-x: auto;
+      padding: 8px 0;
+    }
+
+    .redex-line {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .redex-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-right: 4px;
+    }
+
+    .redex-choice {
+      padding: 4px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 500;
+      font-size: 12px;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .redex-choice:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.1);
+    }
+
+    .redex-choice.depth-0 { background: var(--color-0); color: #000; box-shadow: 2px 2px 0 var(--color-0); }
+    .redex-choice.depth-1 { background: var(--color-1); color: #000; box-shadow: 2px 2px 0 var(--color-1); }
+    .redex-choice.depth-2 { background: var(--color-2); color: #fff; box-shadow: 2px 2px 0 var(--color-2); }
+    .redex-choice.depth-3 { background: var(--color-3); color: #fff; box-shadow: 2px 2px 0 var(--color-3); }
+    .redex-choice.depth-4 { background: var(--color-4); color: #fff; box-shadow: 2px 2px 0 var(--color-4); }
+    .redex-choice.depth-5 { background: var(--color-5); color: #000; box-shadow: 2px 2px 0 var(--color-5); }
+    .redex-choice.depth-6 { background: var(--color-6); color: #fff; box-shadow: 2px 2px 0 var(--color-6); }
+
+    .normal-form-badge {
+      background: var(--color-6);
+      color: #fff;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      box-shadow: 2px 2px 0 var(--color-6);
+    }
+
+    .input-area {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border-color);
+      background: var(--panel-bg);
+      flex-shrink: 0;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .input-row input {
+      flex: 1;
+      padding: 12px 16px;
+      background: var(--bg-color);
+      border: none;
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--text-color);
+      box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.3);
+    }
+
+    .input-row input:focus {
+      outline: none;
+      box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.3), 0 0 0 2px var(--color-2);
+    }
+
+    .input-row input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .input-row button {
+      padding: 12px 20px;
+      background: var(--color-2);
+      color: #000;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 500;
+      transition: all 0.2s;
+      box-shadow: 2px 2px 0 var(--color-2);
+    }
+
+    .input-row button:hover {
+      background: var(--color-3);
+      color: #fff;
+      box-shadow: 3px 3px 0 var(--color-3);
+    }
+
+    .help-text {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .help-text code {
+      background: var(--bg-color);
+      padding: 2px 5px;
+    }
+
+    /* Examples modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .modal-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal {
+      background: var(--panel-bg);
+      border: none;
+      padding: 24px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 4px 4px 0 var(--color-2);
+    }
+
+    .modal h2 {
+      margin: 0 0 16px 0;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--color-2);
+    }
+
+    .examples-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .example-item {
+      background: var(--bg-color);
+      border: none;
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 2px 2px 0 rgba(64, 224, 208, 0.3);
+    }
+
+    .example-item:hover {
+      box-shadow: 3px 3px 0 var(--color-5);
+    }
+
+    .example-item .name {
+      font-weight: 500;
+      color: var(--text-color);
+      margin-bottom: 4px;
+    }
+
+    .example-item .desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .example-item .expr {
+      font-size: 12px;
+      color: var(--color-5);
+    }
+
+    /* Expression node styling */
+    .node {
+      display: inline;
+      position: relative;
+    }
+
+    .node-box {
+      display: inline-block;
+      padding: 2px 4px;
+      margin: 2px;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .node-box.depth-0 { background: var(--bg-0); box-shadow: 2px 2px 0 rgba(0, 255, 127, 0.4); }
+    .node-box.depth-1 { background: var(--bg-1); box-shadow: 2px 2px 0 rgba(0, 255, 255, 0.4); }
+    .node-box.depth-2 { background: var(--bg-2); box-shadow: 2px 2px 0 rgba(0, 191, 255, 0.4); }
+    .node-box.depth-3 { background: var(--bg-3); box-shadow: 2px 2px 0 rgba(30, 144, 255, 0.4); }
+    .node-box.depth-4 { background: var(--bg-4); box-shadow: 2px 2px 0 rgba(100, 149, 237, 0.4); }
+    .node-box.depth-5 { background: var(--bg-5); box-shadow: 2px 2px 0 rgba(64, 224, 208, 0.4); }
+    .node-box.depth-6 { background: var(--bg-6); box-shadow: 2px 2px 0 rgba(60, 179, 113, 0.4); }
+
+    .substituted {
+      background: var(--substitution-bg) !important;
+      box-shadow: 2px 2px 0 rgba(139, 0, 0, 0.6) !important;
+      cursor: pointer;
+    }
+
+    .substituted.highlight-source {
+      background: var(--substitution-highlight) !important;
+      box-shadow: 3px 3px 0 #8B0000 !important;
+    }
+
+    .source-highlight {
+      background: var(--source-bg) !important;
+      box-shadow: 3px 3px 0 #9a9a00 !important;
+    }
+
+    .paren {
+      font-weight: bold;
+    }
+
+    .paren.depth-0 { color: var(--color-0); }
+    .paren.depth-1 { color: var(--color-1); }
+    .paren.depth-2 { color: var(--color-2); }
+    .paren.depth-3 { color: var(--color-3); }
+    .paren.depth-4 { color: var(--color-4); }
+    .paren.depth-5 { color: var(--color-5); }
+    .paren.depth-6 { color: var(--color-6); }
+
+    .redex-indicator {
+      display: inline-block;
+      font-size: 9px;
+      padding: 1px 4px;
+      margin-left: 2px;
+      vertical-align: super;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.2s;
+    }
+
+    .redex-indicator:hover {
+      transform: scale(1.1);
+    }
+
+    .redex-indicator.depth-0 { background: var(--color-0); color: #000; box-shadow: 1px 1px 0 var(--color-0); }
+    .redex-indicator.depth-1 { background: var(--color-1); color: #000; box-shadow: 1px 1px 0 var(--color-1); }
+    .redex-indicator.depth-2 { background: var(--color-2); color: #fff; box-shadow: 1px 1px 0 var(--color-2); }
+    .redex-indicator.depth-3 { background: var(--color-3); color: #fff; box-shadow: 1px 1px 0 var(--color-3); }
+    .redex-indicator.depth-4 { background: var(--color-4); color: #fff; box-shadow: 1px 1px 0 var(--color-4); }
+    .redex-indicator.depth-5 { background: var(--color-5); color: #000; box-shadow: 1px 1px 0 var(--color-5); }
+    .redex-indicator.depth-6 { background: var(--color-6); color: #fff; box-shadow: 1px 1px 0 var(--color-6); }
+
+    /* Scrollbar styling */
+    .conversation::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .conversation::-webkit-scrollbar-track {
+      background: var(--bg-color);
+    }
+
+    .conversation::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+    }
+
+    .conversation::-webkit-scrollbar-thumb:hover {
+      background: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Lambda Calculus Beta Reducer</h1>
+    <div class="header-actions">
+      <button class="header-btn" onclick="showExamples()">Examples</button>
+      <button class="header-btn" onclick="resetConversation()">Clear</button>
+    </div>
+  </div>
+
+  <div class="conversation" id="conversation">
+    <div class="message system-message">
+      Enter a lambda expression below or choose from examples to begin.
+      <br><br>
+      <strong>Syntax:</strong> <code>\x.body</code> or <code>&#955;x.body</code> for lambda, <code>(f x)</code> for application
+    </div>
+  </div>
+
+  <div class="input-area">
+    <div class="input-row">
+      <input type="text" id="lambda-input" placeholder="Enter lambda expression, e.g., (\x.x) hello" autofocus>
+      <button onclick="submitExpression()">Reduce</button>
+    </div>
+    <div class="help-text">
+      Type a reduction number to reduce that redex, or enter a new expression to start fresh.
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="examples-modal" onclick="hideExamples(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+      <h2>Choose an Example</h2>
+      <div class="examples-list" id="examples-list"></div>
+    </div>
+  </div>
+
+  <script>
+    // ============================================================================
+    // Kernel - Lambda Calculus Core (embedded for static hosting)
+    // ============================================================================
+
+    class Variable {
+      constructor(name, fromSubstitution = false, sourceId = null) {
+        this.type = 'variable';
+        this.name = name;
+        this.fromSubstitution = fromSubstitution;
+        this.sourceId = sourceId;
+      }
+
+      clone(fromSubstitution = false, sourceId = null) {
+        return new Variable(
+          this.name,
+          fromSubstitution || this.fromSubstitution,
+          sourceId !== null ? sourceId : this.sourceId
+        );
+      }
+    }
+
+    class Abstraction {
+      constructor(param, body, fromSubstitution = false, sourceId = null) {
+        this.type = 'abstraction';
+        this.param = param;
+        this.body = body;
+        this.fromSubstitution = fromSubstitution;
+        this.sourceId = sourceId;
+      }
+
+      clone(fromSubstitution = false, sourceId = null) {
+        return new Abstraction(
+          this.param,
+          this.body.clone(fromSubstitution, sourceId),
+          fromSubstitution || this.fromSubstitution,
+          sourceId !== null ? sourceId : this.sourceId
+        );
+      }
+    }
+
+    class Application {
+      constructor(func, arg, id = null, fromSubstitution = false, sourceId = null) {
+        this.type = 'application';
+        this.func = func;
+        this.arg = arg;
+        this.id = id;
+        this.fromSubstitution = fromSubstitution;
+        this.sourceId = sourceId;
+      }
+
+      clone(fromSubstitution = false, sourceId = null) {
+        return new Application(
+          this.func.clone(fromSubstitution, sourceId),
+          this.arg.clone(fromSubstitution, sourceId),
+          this.id,
+          fromSubstitution || this.fromSubstitution,
+          sourceId !== null ? sourceId : this.sourceId
+        );
+      }
+    }
+
+    class Parser {
+      constructor(input) {
+        this.input = input.trim();
+        this.pos = 0;
+      }
+
+      peek() { return this.input[this.pos]; }
+      consume() { return this.input[this.pos++]; }
+
+      skipWhitespace() {
+        while (this.pos < this.input.length && /\s/.test(this.peek())) {
+          this.pos++;
+        }
+      }
+
+      parseVariable() {
+        let name = '';
+        while (this.pos < this.input.length && /[a-zA-Z0-9_']/.test(this.peek())) {
+          name += this.consume();
+        }
+        if (name === '') throw new Error(`Expected variable at position ${this.pos}`);
+        return new Variable(name);
+      }
+
+      parseAtom() {
+        this.skipWhitespace();
+        const ch = this.peek();
+
+        if (ch === '(') {
+          this.consume();
+          const expr = this.parseExpr();
+          this.skipWhitespace();
+          if (this.peek() !== ')') throw new Error(`Expected ')' at position ${this.pos}`);
+          this.consume();
+          return expr;
+        }
+
+        if (ch === '\u03BB' || ch === '\\') {
+          this.consume();
+          this.skipWhitespace();
+          const param = this.parseVariable().name;
+          this.skipWhitespace();
+          if (this.peek() !== '.') throw new Error(`Expected '.' after lambda parameter`);
+          this.consume();
+          const body = this.parseExpr();
+          return new Abstraction(param, body);
+        }
+
+        if (/[a-zA-Z]/.test(ch)) return this.parseVariable();
+        throw new Error(`Unexpected character '${ch}' at position ${this.pos}`);
+      }
+
+      parseExpr() {
+        this.skipWhitespace();
+        let left = this.parseAtom();
+
+        while (true) {
+          this.skipWhitespace();
+          const ch = this.peek();
+          if (ch === undefined || ch === ')') break;
+          if (ch === '(' || ch === '\u03BB' || ch === '\\' || /[a-zA-Z]/.test(ch)) {
+            const right = this.parseAtom();
+            left = new Application(left, right);
+          } else break;
+        }
+        return left;
+      }
+
+      parse() {
+        const result = this.parseExpr();
+        this.skipWhitespace();
+        if (this.pos < this.input.length) throw new Error(`Unexpected character at position ${this.pos}`);
+        return result;
+      }
+    }
+
+    function parse(input) { return new Parser(input).parse(); }
+
+    function freeVariables(expr) {
+      switch (expr.type) {
+        case 'variable': return new Set([expr.name]);
+        case 'abstraction':
+          const bodyFree = freeVariables(expr.body);
+          bodyFree.delete(expr.param);
+          return bodyFree;
+        case 'application':
+          return new Set([...freeVariables(expr.func), ...freeVariables(expr.arg)]);
+      }
+    }
+
+    function freshName(name, avoid) {
+      let fresh = name;
+      while (avoid.has(fresh)) fresh += "'";
+      return fresh;
+    }
+
+    function substitute(expr, varName, replacement, markAsSubstituted = true, sourceId = null) {
+      switch (expr.type) {
+        case 'variable':
+          if (expr.name === varName) return replacement.clone(markAsSubstituted, sourceId);
+          return expr;
+
+        case 'abstraction':
+          if (expr.param === varName) return expr;
+          const replFree = freeVariables(replacement);
+          if (replFree.has(expr.param)) {
+            const allFree = new Set([...replFree, ...freeVariables(expr.body)]);
+            allFree.add(varName);
+            const newParam = freshName(expr.param, allFree);
+            const renamedBody = substitute(expr.body, expr.param, new Variable(newParam), false, null);
+            return new Abstraction(newParam, substitute(renamedBody, varName, replacement, markAsSubstituted, sourceId), expr.fromSubstitution, expr.sourceId);
+          }
+          return new Abstraction(expr.param, substitute(expr.body, varName, replacement, markAsSubstituted, sourceId), expr.fromSubstitution, expr.sourceId);
+
+        case 'application':
+          return new Application(
+            substitute(expr.func, varName, replacement, markAsSubstituted, sourceId),
+            substitute(expr.arg, varName, replacement, markAsSubstituted, sourceId),
+            expr.id, expr.fromSubstitution, expr.sourceId
+          );
+      }
+    }
+
+    function isRedex(expr) {
+      return expr.type === 'application' && expr.func.type === 'abstraction';
+    }
+
+    function numberRedexes(expr, counter = { val: 1 }) {
+      switch (expr.type) {
+        case 'variable': return expr;
+        case 'abstraction':
+          return new Abstraction(expr.param, numberRedexes(expr.body, counter), expr.fromSubstitution, expr.sourceId);
+        case 'application':
+          let id = null;
+          if (isRedex(expr)) id = counter.val++;
+          return new Application(numberRedexes(expr.func, counter), numberRedexes(expr.arg, counter), id, expr.fromSubstitution, expr.sourceId);
+      }
+    }
+
+    function clearSubstitutionMarks(expr) {
+      switch (expr.type) {
+        case 'variable': return new Variable(expr.name, false, null);
+        case 'abstraction': return new Abstraction(expr.param, clearSubstitutionMarks(expr.body), false, null);
+        case 'application':
+          return new Application(clearSubstitutionMarks(expr.func), clearSubstitutionMarks(expr.arg), expr.id, false, null);
+      }
+    }
+
+    function reduceAt(expr, targetId) {
+      switch (expr.type) {
+        case 'variable': return expr;
+        case 'abstraction':
+          return new Abstraction(expr.param, reduceAt(expr.body, targetId), expr.fromSubstitution, expr.sourceId);
+        case 'application':
+          if (expr.id === targetId && isRedex(expr)) {
+            const lambda = expr.func;
+            return substitute(lambda.body, lambda.param, expr.arg, true, targetId);
+          }
+          return new Application(reduceAt(expr.func, targetId), reduceAt(expr.arg, targetId), expr.id, expr.fromSubstitution, expr.sourceId);
+      }
+    }
+
+    function getRedexCount(expr) {
+      let count = 0;
+      function traverse(e) {
+        if (e.type === 'application') {
+          if (isRedex(e)) count++;
+          traverse(e.func);
+          traverse(e.arg);
+        } else if (e.type === 'abstraction') {
+          traverse(e.body);
+        }
+      }
+      traverse(expr);
+      return count;
+    }
+
+    function toPlainString(expr) {
+      switch (expr.type) {
+        case 'variable': return expr.name;
+        case 'abstraction': return `\u03BB${expr.param}.${toPlainString(expr.body)}`;
+        case 'application': return `(${toPlainString(expr.func)} ${toPlainString(expr.arg)})`;
+      }
+    }
+
+    // Find the argument of redex with given ID (for cross-step highlighting)
+    function findRedexArg(expr, targetId) {
+      if (expr.type === 'application') {
+        if (expr.id === targetId && isRedex(expr)) {
+          return expr.arg;
+        }
+        const inFunc = findRedexArg(expr.func, targetId);
+        if (inFunc) return inFunc;
+        return findRedexArg(expr.arg, targetId);
+      } else if (expr.type === 'abstraction') {
+        return findRedexArg(expr.body, targetId);
+      }
+      return null;
+    }
+
+    const EXAMPLES = [
+      { name: 'Identity', description: 'The simplest function - returns its argument', expr: '(\\x.x) hello' },
+      { name: 'K Combinator', description: 'Takes two args, returns the first (TRUE)', expr: '(\\x.\\y.x) first second' },
+      { name: 'S Combinator', description: 'The universal combinator - substitution', expr: '(\\x.\\y.\\z.x z (y z)) a b c' },
+      { name: 'Church Numeral 2', description: 'Number 2 applied to successor and zero', expr: '(\\f.\\x.f (f x)) (\\n.succ n) zero' },
+      { name: 'Boolean AND', description: 'TRUE AND FALSE = FALSE', expr: '(\\p.\\q.p q p) (\\x.\\y.x) (\\x.\\y.y)' },
+      { name: 'Boolean OR', description: 'FALSE OR TRUE = TRUE', expr: '(\\p.\\q.p p q) (\\x.\\y.y) (\\x.\\y.x)' },
+      { name: 'Church Addition', description: 'Add 2 + 2 in Church numerals', expr: '(\\m.\\n.\\f.\\x.m f (n f x)) (\\f.\\x.f (f x)) (\\f.\\x.f (f x)) s z' },
+      { name: 'Omega', description: 'Self-application - infinite loop', expr: '(\\x.x x) (\\x.x x)' },
+    ];
+
+    // ============================================================================
+    // Web UI - Chat-like Interface
+    // ============================================================================
+
+    const COLORS = ['#00FF7F', '#00FFFF', '#00BFFF', '#1E90FF', '#6495ED', '#40E0D0', '#3CB371'];
+
+    // Global state
+    let steps = []; // Array of { expr, exprString, reducedId, stepNum }
+    let currentExpr = null;
+
+    function getDepthClass(depth) {
+      return `depth-${depth % 7}`;
+    }
+
+    // Generate unique element IDs for cross-step reference
+    let elementIdCounter = 0;
+    function nextElementId() {
+      return `el-${++elementIdCounter}`;
+    }
+
+    function renderToHTML(expr, depth, stepIndex, redexClickHandler) {
+      const depthClass = getDepthClass(depth);
+
+      switch (expr.type) {
+        case 'variable': {
+          const span = document.createElement('span');
+          span.className = 'node';
+          span.id = nextElementId();
+          span.dataset.stepIndex = stepIndex;
+          if (expr.fromSubstitution) {
+            span.classList.add('substituted');
+            span.dataset.sourceId = expr.sourceId;
+          }
+          span.textContent = expr.name;
+          return span;
+        }
+
+        case 'abstraction': {
+          const container = document.createElement('span');
+          container.className = 'node';
+          container.id = nextElementId();
+          container.dataset.stepIndex = stepIndex;
+          if (expr.fromSubstitution) {
+            container.classList.add('substituted');
+            container.dataset.sourceId = expr.sourceId;
+          }
+
+          const lambda = document.createElement('span');
+          lambda.textContent = '\u03BB' + expr.param + '.';
+          container.appendChild(lambda);
+          container.appendChild(renderToHTML(expr.body, depth, stepIndex, redexClickHandler));
+          return container;
+        }
+
+        case 'application': {
+          const box = document.createElement('span');
+          box.className = `node-box ${depthClass}`;
+          box.id = nextElementId();
+          box.dataset.stepIndex = stepIndex;
+          if (expr.fromSubstitution) {
+            box.classList.add('substituted');
+            box.dataset.sourceId = expr.sourceId;
+          }
+
+          const openParen = document.createElement('span');
+          openParen.className = `paren ${depthClass}`;
+          openParen.textContent = '(';
+
+          const closeParen = document.createElement('span');
+          closeParen.className = `paren ${depthClass}`;
+          closeParen.textContent = ')';
+
+          box.appendChild(openParen);
+          box.appendChild(renderToHTML(expr.func, depth + 1, stepIndex, redexClickHandler));
+          box.appendChild(document.createTextNode(' '));
+          box.appendChild(renderToHTML(expr.arg, depth + 1, stepIndex, redexClickHandler));
+          box.appendChild(closeParen);
+
+          // Add redex indicator if this is a redex
+          if (expr.id !== null) {
+            const indicator = document.createElement('span');
+            indicator.className = `redex-indicator ${depthClass}`;
+            indicator.textContent = expr.id;
+            indicator.title = `Reduce redex ${expr.id}`;
+            indicator.onclick = (e) => {
+              e.stopPropagation();
+              redexClickHandler(expr.id);
+            };
+            box.appendChild(indicator);
+          }
+
+          return box;
+        }
+      }
+    }
+
+    function createStepMessage(step, stepIndex) {
+      const msg = document.createElement('div');
+      msg.className = 'message';
+      msg.dataset.stepIndex = stepIndex;
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'message-header';
+
+      const badge = document.createElement('span');
+      badge.className = 'step-badge';
+      badge.textContent = step.stepNum === 0 ? 'Start' : `Step ${step.stepNum}`;
+      header.appendChild(badge);
+
+      if (step.reducedId !== null) {
+        const info = document.createElement('span');
+        info.className = 'reduction-info';
+        info.textContent = `reduced [${step.reducedId}]`;
+        header.appendChild(info);
+      }
+
+      msg.appendChild(header);
+
+      // Expression content
+      const content = document.createElement('div');
+      content.className = 'expression-content';
+      content.appendChild(renderToHTML(step.expr, 0, stepIndex, handleReduce));
+      msg.appendChild(content);
+
+      // Redex choices (only for most recent step)
+      const redexCount = getRedexCount(step.expr);
+      if (stepIndex === steps.length - 1) {
+        const redexLine = document.createElement('div');
+        redexLine.className = 'redex-line';
+
+        if (redexCount === 0) {
+          const normalBadge = document.createElement('span');
+          normalBadge.className = 'normal-form-badge';
+          normalBadge.textContent = 'Normal form reached';
+          redexLine.appendChild(normalBadge);
+        } else {
+          const label = document.createElement('span');
+          label.className = 'redex-label';
+          label.textContent = 'Reduce:';
+          redexLine.appendChild(label);
+
+          for (let i = 1; i <= redexCount; i++) {
+            const btn = document.createElement('button');
+            btn.className = `redex-choice ${getDepthClass(i - 1)}`;
+            btn.textContent = `[${i}]`;
+            btn.onclick = () => handleReduce(i);
+            redexLine.appendChild(btn);
+          }
+        }
+
+        msg.appendChild(redexLine);
+      }
+
+      return msg;
+    }
+
+    function renderConversation() {
+      const conv = document.getElementById('conversation');
+      conv.innerHTML = '';
+
+      if (steps.length === 0) {
+        const sysMsg = document.createElement('div');
+        sysMsg.className = 'message system-message';
+        sysMsg.innerHTML = `
+          Enter a lambda expression below or choose from examples to begin.
+          <br><br>
+          <strong>Syntax:</strong> <code>\\x.body</code> or <code>\u03BBx.body</code> for lambda, <code>(f x)</code> for application
+        `;
+        conv.appendChild(sysMsg);
+      } else {
+        steps.forEach((step, i) => {
+          conv.appendChild(createStepMessage(step, i));
+        });
+      }
+
+      // Setup hover highlighting
+      setupSubstitutionHover();
+
+      // Scroll to bottom
+      conv.scrollTop = conv.scrollHeight;
+    }
+
+    function setupSubstitutionHover() {
+      const substituted = document.querySelectorAll('.substituted');
+      substituted.forEach(el => {
+        const sourceId = parseInt(el.dataset.sourceId);
+        const stepIndex = parseInt(el.dataset.stepIndex);
+
+        el.addEventListener('mouseenter', () => {
+          // Highlight all elements with same source in current step
+          document.querySelectorAll(`.substituted[data-source-id="${sourceId}"][data-step-index="${stepIndex}"]`).forEach(s => {
+            s.classList.add('highlight-source');
+          });
+
+          // Find and highlight the source argument in the previous step
+          if (stepIndex > 0) {
+            const prevStep = steps[stepIndex - 1];
+            if (prevStep) {
+              // Find the argument of the redex that was reduced
+              const reducedId = steps[stepIndex].reducedId;
+              if (reducedId === sourceId) {
+                // The sourceId matches the redex that was reduced
+                // Highlight the argument in the previous step
+                highlightSourceInPrevStep(stepIndex - 1, reducedId);
+              }
+            }
+          }
+        });
+
+        el.addEventListener('mouseleave', () => {
+          document.querySelectorAll('.highlight-source').forEach(s => {
+            s.classList.remove('highlight-source');
+          });
+          document.querySelectorAll('.source-highlight').forEach(s => {
+            s.classList.remove('source-highlight');
+          });
+        });
+      });
+    }
+
+    function highlightSourceInPrevStep(prevStepIndex, redexId) {
+      // Find the message for the previous step
+      const prevMessage = document.querySelector(`.message[data-step-index="${prevStepIndex}"]`);
+      if (!prevMessage) return;
+
+      // Find the redex indicator with the matching ID
+      const indicator = prevMessage.querySelector(`.redex-indicator`);
+      if (!indicator) return;
+
+      // Find all indicators and match by text content
+      const indicators = prevMessage.querySelectorAll('.redex-indicator');
+      indicators.forEach(ind => {
+        if (parseInt(ind.textContent) === redexId) {
+          // Found the matching redex - highlight its parent (the application box)
+          const appBox = ind.parentElement;
+          if (appBox) {
+            // Highlight the argument of the application
+            // The structure is: (openParen funcNode space argNode closeParen indicator)
+            const children = Array.from(appBox.childNodes);
+            // Find the argument node (second-to-last real node before indicator)
+            let argFound = false;
+            for (let i = children.length - 1; i >= 0; i--) {
+              const child = children[i];
+              if (child.classList && child.classList.contains('redex-indicator')) continue;
+              if (child.classList && child.classList.contains('paren')) continue;
+              if (child.nodeType === 3) continue; // text node (space)
+              if (!argFound) {
+                // This is the argument
+                child.classList.add('source-highlight');
+                argFound = true;
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function handleReduce(id) {
+      if (!currentExpr || steps.length === 0) return;
+
+      // Perform reduction
+      currentExpr = reduceAt(currentExpr, id);
+      currentExpr = numberRedexes(currentExpr);
+
+      // Add new step
+      steps.push({
+        expr: currentExpr,
+        exprString: toPlainString(currentExpr),
+        reducedId: id,
+        stepNum: steps.length
+      });
+
+      renderConversation();
+
+      // Clear substitution marks for next reduction
+      currentExpr = clearSubstitutionMarks(currentExpr);
+      currentExpr = numberRedexes(currentExpr);
+      steps[steps.length - 1].expr = currentExpr;
+    }
+
+    function loadExpression(exprString) {
+      try {
+        currentExpr = parse(exprString);
+        currentExpr = numberRedexes(currentExpr);
+
+        steps = [{
+          expr: currentExpr,
+          exprString: exprString,
+          reducedId: null,
+          stepNum: 0
+        }];
+
+        renderConversation();
+        document.getElementById('lambda-input').value = '';
+      } catch (e) {
+        // Show error as system message
+        const conv = document.getElementById('conversation');
+        const errMsg = document.createElement('div');
+        errMsg.className = 'message system-message';
+        errMsg.textContent = `Parse error: ${e.message}`;
+        errMsg.style.color = '#ff6b6b';
+        conv.appendChild(errMsg);
+        conv.scrollTop = conv.scrollHeight;
+      }
+    }
+
+    function submitExpression() {
+      const input = document.getElementById('lambda-input');
+      const value = input.value.trim();
+
+      if (!value) return;
+
+      // Check if it's a number (redex selection)
+      const num = parseInt(value, 10);
+      if (!isNaN(num) && currentExpr) {
+        const redexCount = getRedexCount(currentExpr);
+        if (num >= 1 && num <= redexCount) {
+          input.value = '';
+          handleReduce(num);
+          return;
+        }
+      }
+
+      // Otherwise treat as new expression
+      loadExpression(value);
+    }
+
+    function resetConversation() {
+      steps = [];
+      currentExpr = null;
+      renderConversation();
+      document.getElementById('lambda-input').focus();
+    }
+
+    function showExamples() {
+      document.getElementById('examples-modal').classList.add('visible');
+    }
+
+    function hideExamples(e) {
+      if (e.target.id === 'examples-modal') {
+        document.getElementById('examples-modal').classList.remove('visible');
+      }
+    }
+
+    function selectExample(expr) {
+      document.getElementById('examples-modal').classList.remove('visible');
+      loadExpression(expr);
+    }
+
+    // Initialize
+    function init() {
+      // Populate examples
+      const list = document.getElementById('examples-list');
+      EXAMPLES.forEach(ex => {
+        const item = document.createElement('div');
+        item.className = 'example-item';
+        item.innerHTML = `
+          <div class="name">${ex.name}</div>
+          <div class="desc">${ex.description}</div>
+          <div class="expr">${ex.expr}</div>
+        `;
+        item.onclick = () => selectExample(ex.expr);
+        list.appendChild(item);
+      });
+
+      // Handle enter key
+      document.getElementById('lambda-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') submitExpression();
+      });
+
+      renderConversation();
+    }
+
+    init();
+  </script>
+</body>
+</html>
