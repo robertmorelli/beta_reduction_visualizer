@@ -312,7 +312,8 @@
 
     // Render expression to HTML string (for use inside pre element)
     // Uses colored parentheses and wraps substituted subtrees in a single box
-    function renderExprToHTML(expr, depth, stepIndex, inSubstitution, redexClickHandler) {
+    // nextReducedId: if the next step reduced a redex, this is its id (for source highlighting)
+    function renderExprToHTML(expr, depth, stepIndex, inSubstitution, nextReducedId, redexClickHandler) {
       const depthClass = getDepthClass(depth);
 
       // Check if this node starts a substitution (is substituted but parent wasn't)
@@ -326,7 +327,7 @@
         wrapper.dataset.stepIndex = stepIndex;
 
         // Render the content inside (now we're "in" a substitution)
-        const inner = renderExprToHTML(expr, depth, stepIndex, true, redexClickHandler);
+        const inner = renderExprToHTML(expr, depth, stepIndex, true, nextReducedId, redexClickHandler);
         wrapper.appendChild(inner);
         return wrapper;
       }
@@ -343,7 +344,7 @@
           const lambdaText = document.createElement('span');
           lambdaText.textContent = '\u03BB' + expr.param + '.';
           container.appendChild(lambdaText);
-          container.appendChild(renderExprToHTML(expr.body, depth, stepIndex, inSubstitution, redexClickHandler));
+          container.appendChild(renderExprToHTML(expr.body, depth, stepIndex, inSubstitution, nextReducedId, redexClickHandler));
           return container;
         }
 
@@ -361,11 +362,15 @@
           // Wrap func and arg in spans so they're always single elements
           const funcWrapper = document.createElement('span');
           funcWrapper.className = 'func';
-          funcWrapper.appendChild(renderExprToHTML(expr.func, depth + 1, stepIndex, inSubstitution, redexClickHandler));
+          funcWrapper.appendChild(renderExprToHTML(expr.func, depth + 1, stepIndex, inSubstitution, nextReducedId, redexClickHandler));
 
           const argWrapper = document.createElement('span');
           argWrapper.className = 'arg';
-          argWrapper.appendChild(renderExprToHTML(expr.arg, depth + 1, stepIndex, inSubstitution, redexClickHandler));
+          // If next step reduced this redex, highlight the argument as source
+          if (expr.id !== null && expr.id === nextReducedId) {
+            argWrapper.classList.add('source-highlight');
+          }
+          argWrapper.appendChild(renderExprToHTML(expr.arg, depth + 1, stepIndex, inSubstitution, nextReducedId, redexClickHandler));
 
           container.appendChild(openParen);
           container.appendChild(funcWrapper);
@@ -418,9 +423,12 @@
       const content = document.createElement('div');
       content.className = 'expression-content';
 
+      // Check if next step reduced a redex from this step (for source highlighting)
+      const nextReducedId = steps[stepIndex + 1]?.reducedId ?? null;
+
       const pre = document.createElement('pre');
       pre.className = 'expression-pre';
-      pre.appendChild(renderExprToHTML(step.expr, 0, stepIndex, false, handleReduce));
+      pre.appendChild(renderExprToHTML(step.expr, 0, stepIndex, false, nextReducedId, handleReduce));
       content.appendChild(pre);
       msg.appendChild(content);
 
@@ -483,66 +491,38 @@
     }
 
     function setupSubstitutionHover() {
+      // Hover on substitution boxes highlights all boxes from the same source in the same step
       const boxes = document.querySelectorAll('.substitution-box');
       boxes.forEach(el => {
         const sourceId = parseInt(el.dataset.sourceId);
         const stepIndex = parseInt(el.dataset.stepIndex);
 
         el.addEventListener('mouseenter', () => {
-          // Highlight all substitution boxes with same source in current step
           document.querySelectorAll(`.substitution-box[data-source-id="${sourceId}"][data-step-index="${stepIndex}"]`).forEach(s => {
             s.classList.add('highlight');
           });
-
-          // Find and highlight the source argument in the previous step
-          if (stepIndex > 0) {
-            highlightSourceInPrevStep(stepIndex - 1, sourceId);
-          }
         });
 
         el.addEventListener('mouseleave', () => {
           document.querySelectorAll('.substitution-box.highlight').forEach(s => {
             s.classList.remove('highlight');
           });
-          document.querySelectorAll('.source-highlight').forEach(s => {
-            s.classList.remove('source-highlight');
-          });
         });
-      });
-    }
-
-    function highlightSourceInPrevStep(prevStepIndex, redexId) {
-      // Find the message for the previous step
-      const prevMessage = document.querySelector(`.message[data-step-index="${prevStepIndex}"]`);
-      if (!prevMessage) return;
-
-      // Find all indicators and match by text content
-      const indicators = prevMessage.querySelectorAll('.redex-indicator');
-      indicators.forEach(ind => {
-        if (parseInt(ind.textContent) === redexId) {
-          // Found the matching redex - find its sibling .arg wrapper
-          // Structure is: (openParen)(func)(space)(arg)(closeParen)(indicator)
-          let node = ind.previousSibling;
-          // Skip closing paren
-          while (node && (node.nodeType === 3 || (node.classList && node.classList.contains('paren')))) {
-            node = node.previousSibling;
-          }
-          // This should be the .arg wrapper
-          if (node && node.classList && node.classList.contains('arg')) {
-            node.classList.add('source-highlight');
-          }
-        }
       });
     }
 
     function handleReduce(id) {
       if (!currentExpr || steps.length === 0) return;
 
-      // Perform reduction
+      // Clear marks on currentExpr before reducing (so new marks are fresh)
+      currentExpr = clearSubstitutionMarks(currentExpr);
+      currentExpr = numberRedexes(currentExpr);
+
+      // Perform reduction - this adds substitution marks
       currentExpr = reduceAt(currentExpr, id);
       currentExpr = numberRedexes(currentExpr);
 
-      // Add new step
+      // Add new step - keep substitution marks for history
       steps.push({
         expr: currentExpr,
         exprString: toPlainString(currentExpr),
@@ -551,11 +531,6 @@
       });
 
       renderConversation();
-
-      // Clear substitution marks for next reduction
-      currentExpr = clearSubstitutionMarks(currentExpr);
-      currentExpr = numberRedexes(currentExpr);
-      steps[steps.length - 1].expr = currentExpr;
     }
 
     function loadExpression(exprString) {
