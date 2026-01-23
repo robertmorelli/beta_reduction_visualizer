@@ -13,8 +13,8 @@
   <div class="header">
     <h1>Lambda Calculus Beta Reducer</h1>
     <div class="header-actions">
-      <button class="header-btn" id="clear-btn" onclick="resetConversation()"
-        style="visibility: collapse;">Clear</button>
+      <button class="header-btn clear-btn" id="clear-btn" onclick="resetConversation()"
+        style="visibility: collapse;">Clear<span class="keybind-badge">esc</span></button>
     </div>
   </div>
 
@@ -30,8 +30,8 @@
   <div id="input-area">
     <div class="input-box examples-box"></div>
     <div class="input-box main-box"></div>
-    <button class="examples-btn" onclick="showExamples()">Examples</button>
-    <button class="reduce-btn" onclick="submitExpression()">Reduce ❯</button>
+    <button class="examples-btn" onclick="showExamples()">Examples<span class="keybind-badge">ctrl-e</span></button>
+    <button class="reduce-btn" onclick="submitExpression()">Reduce ❯<span class="keybind-badge">ctrl-r</span></button>
     <input type="text" id="lambda-input" placeholder="Enter lambda expression, e.g., (\x.x) hello" autofocus>
   </div>
 
@@ -945,11 +945,44 @@
         if (e.key === 'Enter') submitExpression();
       });
 
-      // Keyboard shortcuts for reduction choices (1-9)
+      // Keyboard shortcuts for reduction choices (1-9) and global shortcuts
       document.addEventListener('keydown', (e) => {
-        // Don't handle if typing in input or modal is open
         const input = document.getElementById('lambda-input');
         const modal = document.getElementById('examples-modal');
+
+        // Ctrl-E: Show examples (works anywhere)
+        if (e.ctrlKey && (e.key === 'e' || e.key === 'E')) {
+          e.preventDefault();
+          if (modal.classList.contains('visible')) {
+            document.getElementById('examples-modal').classList.remove('visible');
+          } else {
+            showExamples();
+          }
+          return;
+        }
+
+        // Ctrl-R: Reduce/submit expression (works anywhere except modal)
+        if (e.ctrlKey && (e.key === 'r' || e.key === 'R')) {
+          if (!modal.classList.contains('visible')) {
+            e.preventDefault();
+            submitExpression();
+          }
+          return;
+        }
+
+        // Escape key clears the reduction or closes modal
+        if (e.key === 'Escape') {
+          if (modal.classList.contains('visible')) {
+            e.preventDefault();
+            document.getElementById('examples-modal').classList.remove('visible');
+          } else if (steps.length > 0) {
+            e.preventDefault();
+            resetConversation();
+          }
+          return;
+        }
+
+        // Don't handle number keys if typing in input or modal is open
         if (document.activeElement === input) return;
         if (modal.classList.contains('visible')) return;
 
@@ -961,12 +994,6 @@
             e.preventDefault();
             handleReduce(num);
           }
-        }
-
-        // Escape key clears the reduction
-        if (e.key === 'Escape' && steps.length > 0) {
-          e.preventDefault();
-          resetConversation();
         }
       });
 
